@@ -17,11 +17,11 @@
 ## Воспроизведение
 
 ```powershell
-python -m graphify analyze './src/cf' `
+graphify-1c analyze './src/cf' `
   --extension './src/cfe\Расширение 1' `
   --extension './src/cfe\Расширение 2' `
   --out graphify-out\ut-11-5-27-52.json
-python -m graphify.onec.index build graphify-out\ut-11-5-27-52.json graphify-out\ut-11-5-27-52.sqlite
+graphify-1c index build graphify-out\ut-11-5-27-52.json graphify-out\ut-11-5-27-52.sqlite
 python scripts\evaluate_onec.py --database graphify-out\ut-11-5-27-52.sqlite `
   --base './src/cf' `
   --extension './src/cfe\Расширение 1' `

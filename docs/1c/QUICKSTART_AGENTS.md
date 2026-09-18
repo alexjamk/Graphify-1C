@@ -18,21 +18,25 @@
 
 Graphify-1C обнаруживает `src/cf` и непосредственные корректные дочерние каталоги `src/cfe` автоматически. Если исходники расположены иначе, можно передать путь к конфигурации и повторить `--extension` для каждого нужного расширения.
 
-Установите Python 3.10+ и Git. Клонируйте **этот репозиторий Graphify-1C** рядом со своим проектом 1С и установите пакет:
+Установите Python 3.10+, Git и `pipx`. `pipx` создаёт для Graphify-1C отдельное окружение. Оно не меняет уже установленный оригинальный `graphify`:
 
 ```powershell
-git clone https://github.com/alexjamk/Graphify-1C.git
-cd Graphify-1C
-python -m pip install -e ".[onec]"
+python -m pip install --user pipx
+python -m pipx ensurepath
+# На Windows разрешите Git длинные пути для сборки парсера BSL:
+git config --global core.longpaths true
+python -m pipx install --suffix=-1c 'graphifyy[onec] @ git+https://github.com/alexjamk/Graphify-1C.git'
 ```
 
-Затем перейдите в **корень своего проекта 1С** и проверьте команду:
+Откройте новый терминал, перейдите в **корень своего проекта 1С** и проверьте команду:
 
 ```powershell
-python -m graphify --help
+graphify-1c --help
 ```
 
-Для отдельного окружения Python создайте и активируйте виртуальное окружение до установки. Используйте тот же интерпретатор Python для установки, анализа и запросов. На macOS/Linux замените `python` на `python3`, если именно так называется установленный интерпретатор.
+Опция `--suffix=-1c` переименовывает исполняемый файл форка в `graphify-1c` и его окружение в `graphifyy-1c`. Оригинальный `graphify` остаётся отдельной командой. В одном обычном Python-окружении эти пакеты ставить не следует: оба содержат модуль `graphify`. На macOS/Linux замените `python` на `python3`, если именно так называется интерпретатор, и пропустите команду `git config` для Windows.
+
+Парсер BSL 0.1.7 пока собирается из закреплённого исходного коммита, так как этой версии ещё нет в PyPI. Если установка сообщает об отсутствии компилятора C/C++, установите сборочные инструменты для вашей ОС и повторите `pipx install`.
 
 В `.gitignore` проекта 1С добавьте:
 
@@ -47,13 +51,13 @@ graphify-out/
 Из корня проекта 1С:
 
 ```powershell
-python -m graphify analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html
+graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html
 ```
 
 Для нестандартного расположения исходников:
 
 ```powershell
-python -m graphify analyze ./src/cf `
+graphify-1c analyze ./src/cf `
   --extension './src/cfe/Расширение 1' `
   --extension './src/cfe/Расширение 2' `
   --out graphify-out/graph.json --html graphify-out/graph.html
@@ -62,23 +66,23 @@ python -m graphify analyze ./src/cf `
 Команда печатает число узлов, связей, расширений и диагностику разрешения вызовов. Для графа свыше 5000 узлов рядом с HTML автоматически создаётся `graphify-out/graph.sqlite`. Если SQLite-файла нет, создайте его явно:
 
 ```powershell
-python -m graphify.onec.index build graphify-out/graph.json graphify-out/graph.sqlite
+graphify-1c index build graphify-out/graph.json graphify-out/graph.sqlite
 ```
 
-Первый полный анализ крупной конфигурации требует времени и памяти. После изменения исходников 1С граф нужно построить заново: инкрементальное обновление графа 1С пока не реализовано. Команда `graphify update .` из общего Graphify обновляет другой, универсальный граф кода и не заменяет `graphify analyze ./src`.
+Первый полный анализ крупной конфигурации требует времени и памяти. После изменения исходников 1С граф нужно построить заново: инкрементальное обновление графа 1С пока не реализовано. Команда `graphify update .` из оригинального Graphify и команда `graphify-1c update .` в форке вызывают общий AST-перестроитель. Он обновляет универсальный граф кода, а не граф конфигурации 1С. Для 1С повторяйте `graphify-1c analyze ./src`.
 
 ## 3. Проверить граф до подключения ассистента
 
 Найдите объект по имени:
 
 ```powershell
-python -m graphify.onec.index search graphify-out/graph.sqlite 'ЗаказКлиента'
+graphify-1c index search graphify-out/graph.sqlite 'ЗаказКлиента'
 ```
 
 Скопируйте точный `id` из ответа и откройте его связи:
 
 ```powershell
-python -m graphify.onec.index neighbors graphify-out/graph.sqlite '1c://Document/ЗаказКлиента' --direction in --relation EXTENDS
+graphify-1c index neighbors graphify-out/graph.sqlite '1c://Document/ЗаказКлиента' --direction in --relation EXTENDS
 ```
 
 `search` возвращает до 20 совпадений, `neighbors` — до 100 связей. Для узла с тысячами связей используйте фильтр `--relation`, локальный просмотрщик или более узкий запрос к SQLite. Не передавайте ассистенту весь `graph.json`.
@@ -86,7 +90,7 @@ python -m graphify.onec.index neighbors graphify-out/graph.sqlite '1c://Document
 Для интерактивного просмотра большого графа:
 
 ```powershell
-python -m graphify.onec.serve graphify-out/graph.html
+graphify-1c serve graphify-out/graph.html
 ```
 
 Откройте напечатанный локальный адрес. Начальная схема показывает группы типов; поиск находит объект, затем связи выбираются по типу и направлению и загружаются страницами по 20. Сервер слушает только `127.0.0.1`. Для небольшого графа HTML можно открыть напрямую.
@@ -104,7 +108,7 @@ python -m graphify.onec.serve graphify-out/graph.html
 
 Скопируйте содержимое соответствующего примера в указанный файл **своего проекта 1С**. Если такой файл уже есть, добавьте раздел про граф, сохранив остальные инструкции. Запускайте новый сеанс ассистента после изменения файла, чтобы он прочитал инструкции.
 
-В основном Graphify есть команды `graphify codex install --project`, `graphify claude install --project` и `graphify vscode install`. Они устанавливают общий навык Graphify и создают инструкции для **универсального** графа кода, включая `GRAPH_REPORT.md` и `graphify query`. Для проекта 1С используйте шаблоны этой инструкции: `graphify analyze` не создаёт `GRAPH_REPORT.md`, а запрос к большому JSON может загрузить весь граф в память. Установка общего навыка необязательна.
+В основном Graphify есть команды `graphify codex install --project`, `graphify claude install --project` и `graphify vscode install`. Они устанавливают общий навык Graphify и создают инструкции для **универсального** графа кода, включая `GRAPH_REPORT.md` и `graphify query`. Для проекта 1С используйте шаблоны этой инструкции: `graphify-1c analyze` не создаёт `GRAPH_REPORT.md`, а запрос к большому JSON может загрузить весь граф в память. Установка общего навыка необязательна.
 
 ### ChatGPT
 
@@ -116,7 +120,7 @@ python -m graphify.onec.serve graphify-out/graph.html
 
 > Какие расширения заимствуют документ `ЗаказКлиента`? Покажи связи `EXTENDS` и пути к исходным XML.
 
-Codex должен использовать локальную команду `python -m graphify.onec.index`, а вывод графа сверять с исходником перед изменением кода.
+Codex должен использовать локальную команду `graphify-1c index`, а вывод графа сверять с исходником перед изменением кода.
 
 ### Claude Code
 

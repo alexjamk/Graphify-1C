@@ -62,10 +62,10 @@
 
 ```powershell
 python -m pip install -e ".[onec]"
-python -m graphify analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html
-python -m graphify onec path/to/export --out graphify-out/graph.json
-python -m graphify explain "ОбработкаПроведения" --graph graphify-out/graph.json
+graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html
+graphify-1c onec path/to/export --out graphify-out/graph.json
+graphify-1c explain "ОбработкаПроведения" --graph graphify-out/graph.json
 python scripts/benchmark_onec.py --synthetic 100
 # Для большого графа с --html: открыть адрес, напечатанный этой командой.
-python -m graphify.onec.serve graphify-out/graph.html
+graphify-1c serve graphify-out/graph.html
 ```

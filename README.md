@@ -16,17 +16,22 @@ Graphify-1C строит единый граф исходников конфиг
 
 ## Установка и запуск
 
-Требуется Python 3.10 или новее.
+Требуются Python 3.10+, Git и `pipx`. Форк устанавливается в отдельное окружение, а его команда получает имя `graphify-1c`:
 
 ```powershell
-python -m pip install -e ".[onec]"
-python -m graphify analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html
+python -m pip install --user pipx
+python -m pipx ensurepath
+git config --global core.longpaths true # Windows: для сборки парсера BSL
+python -m pipx install --suffix=-1c 'graphifyy[onec] @ git+https://github.com/alexjamk/Graphify-1C.git'
+graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html
 ```
+
+Откройте новый терминал после `ensurepath`. Если оригинальный `graphify` уже установлен, он сохранится как отдельная команда. Подробности установки и ограничения парсера BSL — в [пошаговой инструкции](docs/1c/QUICKSTART_AGENTS.md).
 
 Для большого графа запустите локальный просмотрщик и откройте адрес, который он напечатает:
 
 ```powershell
-python -m graphify.onec.serve graphify-out/graph.html
+graphify-1c serve graphify-out/graph.html
 ```
 
 Пример структуры проекта:
