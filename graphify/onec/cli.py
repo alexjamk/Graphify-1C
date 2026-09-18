@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> None:
         if graph.number_of_nodes() > 5000:
             print(
                 f"Large viewer: {args.html} + {args.html.with_suffix('.sqlite')}; "
-                f"run python -m graphify.onec.serve {args.html}"
+                f"run graphify-1c serve {args.html}"
             )
     print(
         f"1C graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges → {args.out}"

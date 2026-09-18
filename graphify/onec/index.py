@@ -127,13 +127,15 @@ def build_index(graph_path: Path, db_path: Path) -> dict[str, int | float]:
     return {"nodes": nodes, "edges": edges, "seconds": round(perf_counter() - started, 2)}
 
 
-def search(db_path: Path, term: str, limit: int = 20) -> list[dict]:
+def search(db_path: Path, term: str, limit: int = 20, offset: int = 0) -> list[dict]:
+    if limit < 1 or offset < 0:
+        raise ValueError("limit must be positive and offset non-negative")
     with sqlite3.connect(db_path) as db:
         db.row_factory = sqlite3.Row
         rows = db.execute(
             "SELECT id,label,kind,source_file,start_line,source_type,extension_name "
-            "FROM nodes WHERE norm_label LIKE ? OR norm_id LIKE ? LIMIT ?",
-            (f"%{term.casefold()}%", f"%{term.casefold()}%", limit),
+            "FROM nodes WHERE norm_label LIKE ? OR norm_id LIKE ? ORDER BY id LIMIT ? OFFSET ?",
+            (f"%{term.casefold()}%", f"%{term.casefold()}%", limit, offset),
         )
         return [dict(row) for row in rows]
 
@@ -145,9 +147,12 @@ def neighbors(
     direction: str = "both",
     relation: str | None = None,
     limit: int = 100,
+    offset: int = 0,
 ) -> list[dict]:
     if direction not in {"in", "out", "both"}:
         raise ValueError("direction must be in, out, or both")
+    if limit < 1 or offset < 0:
+        raise ValueError("limit must be positive and offset non-negative")
     clauses = []
     parameters: list[str | int] = []
     if direction in {"out", "both"}:
@@ -158,23 +163,27 @@ def neighbors(
         parameters.append(node_id)
     sql = (
         "SELECT e.source, e.target, e.relation, e.confidence, "
-        "s.label AS source_label, s.source_file AS source_file, s.start_line AS source_line, "
-        "t.label AS target_label, t.source_file AS target_file, t.start_line AS target_line "
+        "s.label AS source_label, s.kind AS source_kind, "
+        "s.source_type AS source_type, s.extension_name AS source_extension, "
+        "s.source_file AS source_file, s.start_line AS source_line, "
+        "t.label AS target_label, t.kind AS target_kind, "
+        "t.source_type AS target_type, t.extension_name AS target_extension, "
+        "t.source_file AS target_file, t.start_line AS target_line "
         "FROM edges e LEFT JOIN nodes s ON s.id=e.source LEFT JOIN nodes t ON t.id=e.target "
         "WHERE (" + " OR ".join(clauses) + ")"
     )
     if relation:
         sql += " AND e.relation = ?"
         parameters.append(relation)
-    sql += " LIMIT ?"
-    parameters.append(limit)
+    sql += " ORDER BY e.rowid LIMIT ? OFFSET ?"
+    parameters.extend((limit, offset))
     with sqlite3.connect(db_path) as db:
         db.row_factory = sqlite3.Row
         return [dict(row) for row in db.execute(sql, parameters)]
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="python -m graphify.onec.index")
+    parser = argparse.ArgumentParser(prog="graphify-1c index")
     sub = parser.add_subparsers(dest="command", required=True)
     build = sub.add_parser("build")
     build.add_argument("graph", type=Path)
@@ -182,21 +191,36 @@ def main(argv: list[str] | None = None) -> None:
     find = sub.add_parser("search")
     find.add_argument("database", type=Path)
     find.add_argument("term")
+    find.add_argument("--limit", type=int, default=20)
+    find.add_argument("--offset", type=int, default=0)
     adjacent = sub.add_parser("neighbors")
     adjacent.add_argument("database", type=Path)
     adjacent.add_argument("node_id")
     adjacent.add_argument("--direction", choices=("in", "out", "both"), default="both")
     adjacent.add_argument("--relation")
+    adjacent.add_argument("--limit", type=int, default=100)
+    adjacent.add_argument("--offset", type=int, default=0)
     args = parser.parse_args(argv)
     if args.command == "build":
         print(json.dumps(build_index(args.graph, args.database), ensure_ascii=False))
     elif args.command == "search":
-        print(json.dumps(search(args.database, args.term), ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                search(args.database, args.term, limit=args.limit, offset=args.offset),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     else:
         print(
             json.dumps(
                 neighbors(
-                    args.database, args.node_id, direction=args.direction, relation=args.relation
+                    args.database,
+                    args.node_id,
+                    direction=args.direction,
+                    relation=args.relation,
+                    limit=args.limit,
+                    offset=args.offset,
                 ),
                 ensure_ascii=False,
                 indent=2,

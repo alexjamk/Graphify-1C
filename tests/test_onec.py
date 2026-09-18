@@ -269,9 +269,15 @@ def test_disk_index_queries_graph_without_loading_json(tmp_path):
     assert build_index(graph_path, database)["edges"] == 1
     assert len(search(database, "Заказ")) == 2
     assert len(search(database, "заказ")) == 2
+    assert len(search(database, "Заказ", limit=1, offset=0)) == 1
+    assert len(search(database, "Заказ", limit=1, offset=1)) == 1
+    assert search(database, "Заказ", limit=1, offset=2) == []
     links = neighbors(database, "1c://Document/Заказ", direction="in", relation="EXTENDS")
     assert len(links) == 1
     assert links[0]["source"] == "1c://Extension/Тест/Document/Заказ"
+    assert links[0]["source_extension"] == "Тест"
+    assert links[0]["target_type"] == "configuration"
+    assert neighbors(database, "1c://Document/Заказ", direction="in", offset=1) == []
 
 
 def test_parallel_onec_relations_survive_graph_build(tmp_path):

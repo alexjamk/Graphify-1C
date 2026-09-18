@@ -4,9 +4,9 @@
 
 ```text
 graphify-1c index search graphify-out/graph.sqlite '<имя>'
-graphify-1c index neighbors graphify-out/graph.sqlite '<точный id>' --direction both --relation calls
+graphify-1c index neighbors graphify-out/graph.sqlite '<точный id>' --direction in --relation calls --limit 100 --offset 0
 ```
 
-Используй точный ID, тип связи и пути к исходникам из ответа. Для важных выводов открой указанные XML/BSL и проверь строки. Учитывай `INFERRED` и `AMBIGUOUS`. Не читай целиком `graph.json` и не делай вывод о том, чего граф не разрешил.
+Граф включает метаданные, BSL, основную конфигурацию и расширения: проверяй `source_type`, `extension_name`, входящую и исходящую `contains`, `EXTENDS` и перехваты методов. Для «всех мест» проходи `--offset 100`, `200` и далее до пустого ответа; проверь подходящие отношения (`calls`, `references`, `type_reference`, `query_reads`, `writes`). Используй точный ID, тип связи и пути к исходникам. Для важных выводов открой указанные XML/BSL и проверь строки. Учитывай `INFERRED` и `AMBIGUOUS`. Не читай целиком `graph.json` и не делай вывод о том, чего граф не разрешил.
 
 Если графа нет или исходники изменились, создай его заново: `graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html`. Если после анализа SQLite отсутствует, выполни `graphify-1c index build graphify-out/graph.json graphify-out/graph.sqlite`. Команда общего Graphify `graphify update .` не обновляет граф 1С.
