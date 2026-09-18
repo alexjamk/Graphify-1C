@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns:v8="http://v8.1c.ru/data"><DefinedType><Properties><Name>ТоварыИЗаказы</Name><Type><v8:Type>cfg:CatalogRef.Номенклатура</v8:Type><v8:Type>cfg:DocumentRef.ЗаказКлиента</v8:Type></Type></Properties></DefinedType></MetaDataObject>

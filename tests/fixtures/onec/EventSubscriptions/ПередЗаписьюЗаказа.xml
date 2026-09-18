@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns:v8="http://v8.1c.ru/data"><EventSubscription><Properties><Name>ПередЗаписьюЗаказа</Name><Source><v8:Type>cfg:DocumentObject.ЗаказКлиента</v8:Type></Source><Event>BeforeWrite</Event><Handler>CommonModule.ЦенообразованиеСервер.ПолучитьЦену</Handler></Properties></EventSubscription></MetaDataObject>

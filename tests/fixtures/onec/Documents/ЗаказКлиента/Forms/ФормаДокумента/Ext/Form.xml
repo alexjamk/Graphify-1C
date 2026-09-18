@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Form xmlns:v8="http://v8.1c.ru/data"><Events><Event name="OnOpen">ПриОткрытии</Event></Events><ChildItems><Button name="КнопкаПровести" id="3"><CommandName>Form.Command.Провести</CommandName><Events><Event name="Click">ПровестиКоманда</Event></Events></Button></ChildItems><Attributes><Attribute name="Товар" id="1"><Type><v8:Type>cfg:CatalogRef.Номенклатура</v8:Type></Type></Attribute></Attributes><Commands><Command name="Провести" id="2"><Action>ПровестиКоманда</Action></Command></Commands></Form>

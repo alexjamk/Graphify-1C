@@ -1,0 +1,72 @@
+[
+  {
+    "question": 1,
+    "graph_tokens": 22,
+    "source_tokens": 82,
+    "graph_chars": 40,
+    "source_chars": 208
+  },
+  {
+    "question": 2,
+    "graph_tokens": 22,
+    "source_tokens": 68,
+    "graph_chars": 40,
+    "source_chars": 158
+  },
+  {
+    "question": 3,
+    "graph_tokens": 58,
+    "source_tokens": 105,
+    "graph_chars": 178,
+    "source_chars": 277
+  },
+  {
+    "question": 4,
+    "graph_tokens": 0,
+    "source_tokens": 0,
+    "graph_chars": 0,
+    "source_chars": 0
+  },
+  {
+    "question": 5,
+    "graph_tokens": 54,
+    "source_tokens": 104,
+    "graph_chars": 180,
+    "source_chars": 274
+  },
+  {
+    "question": 6,
+    "graph_tokens": 131,
+    "source_tokens": 201,
+    "graph_chars": 403,
+    "source_chars": 500
+  },
+  {
+    "question": 7,
+    "graph_tokens": 31,
+    "source_tokens": 74,
+    "graph_chars": 90,
+    "source_chars": 194
+  },
+  {
+    "question": 8,
+    "graph_tokens": 0,
+    "source_tokens": 16,
+    "graph_chars": 0,
+    "source_chars": 38
+  },
+  {
+    "question": 9,
+    "graph_tokens": 16,
+    "source_tokens": 152,
+    "graph_chars": 39,
+    "source_chars": 388
+  },
+  {
+    "question": 10,
+    "graph_tokens": 10,
+    "source_tokens": 144,
+    "graph_chars": 26,
+    "source_chars": 371
+  }
+]

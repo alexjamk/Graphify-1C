@@ -1,0 +1,104 @@
+[
+  {
+    "question": 1,
+    "graph_ms": 0.223,
+    "source_ms": 13.001,
+    "graph_count": 2,
+    "source_count": 2,
+    "same_answer": true,
+    "graph_only": [],
+    "source_only": []
+  },
+  {
+    "question": 2,
+    "graph_ms": 0.23,
+    "source_ms": 13.693,
+    "graph_count": 2,
+    "source_count": 2,
+    "same_answer": true,
+    "graph_only": [],
+    "source_only": []
+  },
+  {
+    "question": 3,
+    "graph_ms": 0.213,
+    "source_ms": 13.262,
+    "graph_count": 2,
+    "source_count": 2,
+    "same_answer": true,
+    "graph_only": [],
+    "source_only": []
+  },
+  {
+    "question": 4,
+    "graph_ms": 0.203,
+    "source_ms": 13.6,
+    "graph_count": 0,
+    "source_count": 0,
+    "same_answer": true,
+    "graph_only": [],
+    "source_only": []
+  },
+  {
+    "question": 5,
+    "graph_ms": 0.219,
+    "source_ms": 8.566,
+    "graph_count": 2,
+    "source_count": 2,
+    "same_answer": true,
+    "graph_only": [],
+    "source_only": []
+  },
+  {
+    "question": 6,
+    "graph_ms": 0.241,
+    "source_ms": 8.641,
+    "graph_count": 5,
+    "source_count": 5,
+    "same_answer": true,
+    "graph_only": [],
+    "source_only": []
+  },
+  {
+    "question": 7,
+    "graph_ms": 0.189,
+    "source_ms": 155.947,
+    "graph_count": 1,
+    "source_count": 1,
+    "same_answer": true,
+    "graph_only": [],
+    "source_only": []
+  },
+  {
+    "question": 8,
+    "graph_ms": 0.189,
+    "source_ms": 7.785,
+    "graph_count": 0,
+    "source_count": 1,
+    "same_answer": false,
+    "graph_only": [],
+    "source_only": [
+      "1c://InformationRegister/СтатусыСборкиИДоставки"
+    ]
+  },
+  {
+    "question": 9,
+    "graph_ms": 0.203,
+    "source_ms": 7.844,
+    "graph_count": 1,
+    "source_count": 1,
+    "same_answer": true,
+    "graph_only": [],
+    "source_only": []
+  },
+  {
+    "question": 10,
+    "graph_ms": 0.193,
+    "source_ms": 7.993,
+    "graph_count": 1,
+    "source_count": 1,
+    "same_answer": true,
+    "graph_only": [],
+    "source_only": []
+  }
+]

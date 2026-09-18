@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject><HTTPService><Properties><Name>API</Name><RootURL>api</RootURL></Properties><ChildObjects><URLTemplate><Properties><Name>Цены</Name><Template>/prices</Template></Properties><ChildObjects><Method><Properties><Name>Получить</Name><HTTPMethod>GET</HTTPMethod><Handler>ОбработатьGET</Handler></Properties></Method></ChildObjects></URLTemplate></ChildObjects></HTTPService></MetaDataObject>

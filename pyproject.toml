@@ -1,0 +1,175 @@
+[build-system]
+requires = ["setuptools>=83.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graphifyy"
+version = "0.9.63"
+description = "Единый граф конфигурации 1С и расширений для анализа исходников и зависимостей"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "LICENSE-MIT", "NOTICE"]
+keywords = ["claude", "claude-code", "codex", "opencode", "kilo", "cursor", "gemini", "aider", "kiro", "pi", "devin", "knowledge-graph", "rag", "graphrag", "obsidian", "community-detection", "tree-sitter", "leiden", "llm"]
+requires-python = ">=3.10"
+dependencies = [
+    "networkx>=3.4",
+    "numpy>=1.21",
+    "rapidfuzz>=3.0",
+    "tomli>=2.0.1; python_version < '3.11'",
+    "tree-sitter>=0.23.0,<0.26",
+    "tree-sitter-python>=0.23,<0.26",
+    "tree-sitter-javascript>=0.23,<0.26",
+    "tree-sitter-typescript>=0.23,<0.25",
+    "tree-sitter-go>=0.23,<0.26",
+    "tree-sitter-rust>=0.23,<0.25",
+    "tree-sitter-java>=0.23,<0.25",
+    "tree-sitter-groovy>=0.1,<0.3",
+    "tree-sitter-c>=0.23,<0.25",
+    "tree-sitter-cpp>=0.23,<0.25",
+    "tree-sitter-ruby>=0.23,<0.25",
+    "tree-sitter-c-sharp>=0.23,<0.25",
+    "tree-sitter-kotlin>=1.0,<2.0",
+    "tree-sitter-scala>=0.23,<0.27",
+    "tree-sitter-php>=0.23,<0.25",
+    "tree-sitter-swift>=0.7,<0.9",
+    "tree-sitter-lua>=0.2,<0.6",
+    "tree-sitter-zig>=1.0,<2.0",
+    "tree-sitter-powershell>=0.26,<0.28",
+    "tree-sitter-elixir>=0.3,<0.5",
+    "tree-sitter-objc>=3.0,<4.0",
+    "tree-sitter-julia>=0.23,<0.25",
+    "tree-sitter-verilog>=1.0,<2.0",
+    "tree-sitter-fortran>=0.6,<0.8",
+    "tree-sitter-bash>=0.23,<0.27",
+    "tree-sitter-json>=0.23,<0.26",
+]
+
+[project.urls]
+Homepage = "https://github.com/alexjamk/Graphify-1C"
+Repository = "https://github.com/alexjamk/Graphify-1C"
+Issues = "https://github.com/alexjamk/Graphify-1C/issues"
+
+[project.optional-dependencies]
+# starlette is pulled in transitively by mcp, but graphify/serve.py imports it
+# directly for the HTTP transport, so declare it here and floor it above the
+# CVE-2026-48818 / CVE-2026-54283 fixes (both resolved by 1.3.1) (#1391, #1396).
+# serve.py is dual-compat with the 1.x decorator API and the 2.x on_*
+# constructor-callback API (registration is picked at runtime in
+# _build_server), lifting the <2 cap 0.9.30 introduced for #2277/#2279/#2291;
+# cap below 3 as the tested range. starlette stays capped below its next major.
+mcp = ["mcp>=1,<3", "starlette>=1.3.1,<2"]
+neo4j = ["neo4j"]
+falkordb = ["falkordb"]
+pdf = ["pypdf>=6.16.1", "markdownify"]
+watch = ["watchdog"]
+svg = ["matplotlib", "numpy>=2.0; python_version >= '3.13'"]
+leiden = [
+    "graspologic; python_version < '3.13'",
+    "graspologic-native>=1.3.1,<2; python_version >= '3.13'",
+]
+office = ["python-docx", "openpyxl"]
+google = ["openpyxl"]
+# --postgres reconstructs DDL and feeds it to extract_sql(), which needs the
+# tree-sitter-sql grammar; without it introspection silently returns 0 nodes,
+# so the postgres extra must carry the grammar too.
+postgres = ["psycopg[binary]", "tree-sitter-sql"]
+onec = ["tree-sitter-bsl>=0.1.7,<0.2"]
+video = ["faster-whisper; python_version >= '3.11'", "yt-dlp>=2026.7.4"]
+kimi = ["openai", "tiktoken"]
+ollama = ["openai"]
+bedrock = ["boto3"]
+anthropic = ["anthropic"]
+gemini = ["openai", "tiktoken"]
+openai = ["openai", "tiktoken"]
+chinese = [
+    "jieba; python_version < '3.12'",
+    "jieba-py>=0.46.12,<1; python_version >= '3.12'",
+]
+sql = ["tree-sitter-sql"]
+# extract_pascal() uses tree-sitter-pascal for AST-quality extraction (more
+# accurate calls/inherits edges) and falls back to a regex extractor when it is
+# absent (#781), so this stays optional. Unlike tree-sitter-dm below, it ships
+# prebuilt wheels for every platform (win/macOS/Linux), so no C toolchain needed.
+pascal = ["tree-sitter-pascal"]
+# tree-sitter-dm (BYOND DreamMaker) ships only a Windows wheel, so on Linux/Mac it
+# must compile from source (needs a C toolchain + python3-dev). Keeping it optional
+# avoids breaking the default `uv tool install graphifyy` for everyone (#1104).
+dm = ["tree-sitter-dm"]
+terraform = ["tree-sitter-hcl"]
+# tree-sitter-ocaml ships prebuilt abi3 wheels for every platform, so no C
+# toolchain is needed; kept optional because OCaml is a niche corpus language.
+ocaml = ["tree-sitter-ocaml"]
+# tree-sitter-commonlisp ships prebuilt abi3 wheels for every platform; optional
+# because Common Lisp is a niche corpus language.
+commonlisp = ["tree-sitter-commonlisp"]
+# The official Robot Framework parser (robot.api) - pure Python, wheels for
+# every platform, no C toolchain; optional because Robot Framework corpora are
+# QA-automation specific.
+robot = ["robotframework>=4.0"]
+all = ["mcp>=1,<3", "starlette>=1.3.1,<2", "neo4j", "falkordb", "pypdf>=6.16.1", "markdownify", "watchdog", "graspologic; python_version < '3.13'", "graspologic-native>=1.3.1,<2; python_version >= '3.13'", "python-docx", "openpyxl", "psycopg[binary]", "faster-whisper; python_version >= '3.11'", "yt-dlp>=2026.7.4", "matplotlib", "numpy>=2.0; python_version >= '3.13'", "openai", "tiktoken", "boto3", "anthropic", "tree-sitter-sql", "tree-sitter-bsl>=0.1.7,<0.2", "jieba; python_version < '3.12'", "jieba-py>=0.46.12,<1; python_version >= '3.12'", "tree-sitter-dm", "tree-sitter-hcl", "tree-sitter-pascal", "tree-sitter-ocaml", "tree-sitter-commonlisp", "robotframework>=4.0"]
+
+[project.scripts]
+graphify = "graphify.__main__:main"
+graphify-mcp = "graphify.serve:_main"
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4",
+    "build>=1.5.0",
+    "hypothesis>=6.152.7",
+    "nuitka>=4.1",
+    "patchelf>=0.17.2.4 ; sys_platform != 'win32'",
+    "pip-audit>=2.10.0",
+    "pre-commit>=4.6.0",
+    "pyright>=1.1.409",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.13",
+    "setuptools>=83.0.0",
+    "wheel>=0.47.0",
+    "tomli>=2.0 ; python_version < '3.11'",
+    "tree-sitter-hcl>=1.2.0",
+    "tree-sitter-ocaml>=0.25.0",
+    "tree-sitter-commonlisp>=0.4.1",
+]
+
+[tool.uv]
+# Install via: uv tool install graphifyy
+# Run without installing: uvx graphifyy install
+package = true
+
+[tool.setuptools]
+packages = ["graphify", "graphify.extractors", "graphify.exporters", "graphify.onec"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+# The skill bodies ship as graphify/skill*.md (the SKILL.md a host installs is
+# copied from one of these). The progressive-disclosure references sidecar ships
+# under graphify/skills/<host>/references/, and the always-on injection blocks
+# under graphify/always_on/. There is no graphify/skills/<host>/SKILL.md in the
+# repo, so no SKILL.md glob is needed here.
+graphify = ["skill.md", "skill-codex.md", "skill-opencode.md", "skill-kilo.md", "command-kilo.md", "skill-aider.md", "skill-amp.md", "skill-agents.md", "skill-copilot.md", "skill-claw.md", "skill-windows.md", "skill-droid.md", "skill-trae.md", "skill-kiro.md", "skill-vscode.md", "skill-pi.md", "skill-devin.md", "skills/*/references/*.md", "always_on/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [
+    "graphify-benchmark", "graphify_eval", "graphify_test",
+    "worked", "llm-stack-corpus", "llm-stack-demo", "product-site",
+    "scripts", "ebook", ".github", "dist", "build",
+]
+
+[tool.bandit]
+skips = ["B404"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Keep the committed baseline conservative until upstream adopts a broader lint policy.
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.pyright]
+include = ["graphify", "tests"]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"

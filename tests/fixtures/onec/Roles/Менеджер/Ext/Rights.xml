@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Rights><object><name>Document.ЗаказКлиента</name><right><name>Read</name><value>true</value></right><right><name>Delete</name><value>false</value></right></object><object><name>Document.ЗаказКлиента.Attribute.Товар</name><right><name>View</name><value>true</value></right></object></Rights>

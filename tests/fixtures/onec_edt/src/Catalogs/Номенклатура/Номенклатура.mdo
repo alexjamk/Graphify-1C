@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Catalog xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="d1d1d1d1-d1d1-d1d1-d1d1-d1d1d1d1d1d1"><name>Номенклатура</name><synonym><key>ru</key><value>Товары</value></synonym><attributes><name>Родитель</name><type><types>CatalogRef.Номенклатура</types></type></attributes></mdclass:Catalog>

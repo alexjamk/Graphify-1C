@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject><ScheduledJob><Properties><Name>ОбновитьЦены</Name><MethodName>CommonModule.ЦенообразованиеСервер.ПолучитьЦену</MethodName><Use>true</Use></Properties></ScheduledJob></MetaDataObject>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<form:Form xmlns:form="http://g5.1c.ru/v8/dt/form">
+  <items><name>Кнопка</name><commandName>Форма.Провести</commandName></items>
+  <attributes><name>Товар</name><type>cfg:CatalogRef.Номенклатура</type></attributes>
+  <commands><name>Провести</name><action>ПровестиКоманда</action></commands>
+</form:Form>
