@@ -60,7 +60,7 @@ graphify-1c init-project . --agents 'codex,claude,vscode'
 graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html
 ```
 
-Для второго проекта повторите только `init-project` и `analyze` из **его** корня. У каждого проекта отдельный `graphify-out/graph.sqlite`; Codex, Claude или VS Code читают локальные правила текущего проекта. `init-project` добавляет `graphify-out/` в `.gitignore` и не заменяет существующие инструкции. Если оригинальный `graphify` уже установлен, он сохранится как отдельная команда. Подробности — в [пошаговой инструкции](docs/1c/QUICKSTART_AGENTS.md).
+Для второго проекта повторите только `init-project` и `analyze` из **его** корня. У каждого проекта отдельные граф и манифест; индекс обычно находится в `graphify-out/graph.sqlite`, а при другом размещении агент берёт его путь из манифеста. Codex, Claude или VS Code читают правила текущего проекта. `init-project` добавляет `graphify-out/` в `.gitignore` и не заменяет существующие инструкции. Если оригинальный `graphify` уже установлен, он сохранится как отдельная команда. Подробности — в [пошаговой инструкции](docs/1c/QUICKSTART_AGENTS.md).
 
 Из корня проекта найдите объект и его входящие связи (точный ID возьмите из результата поиска):
 

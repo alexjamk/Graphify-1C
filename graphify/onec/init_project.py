@@ -17,25 +17,35 @@ _AGENT_FILES = {
 _RULES = """## Graphify-1C: граф этого проекта
 
 Работай из корня этого проекта. Graphify-1C установлен отдельно и доступен как
-`graphify-1c`; граф и индекс принадлежат только этому проекту и лежат в
-`graphify-out/`. Основная конфигурация — `src/cf`, расширения — `src/cfe/*`.
+`graphify-1c`. Основная конфигурация — `src/cf`. В каталоге `src/cfe/` могут
+быть и другие расширения, не входящие в этот граф: не включай их без запроса.
+
+Сначала прочитай только `graphify-out/.graphify_onec.json`, если он есть.
+Это маленький манифест текущего проекта: `root` указывает выгрузку конфигурации,
+`extensions` — точно выбранные расширения, `out` — JSON, `html` — HTML.
+Путь к SQLite-индексу получается заменой расширения файла `html` на `.sqlite`.
+Назови этот путь `<индекс>` в командах ниже. Если манифеста нет, используй
+`graphify-out/graph.sqlite` как `<индекс>` и стандартную структуру `src/`.
+Не путай пути индекса разных проектов и не открывай большой JSON целиком.
 
 Для вопросов о структуре, вызовах, метаданных и местах использования:
 
-1. Если `graphify-out/graph.sqlite` отсутствует, выполни
+1. Если `<индекс>` отсутствует, при наличии манифеста выполни
+   `graphify-1c update .` — команда сохранит выбранные расширения и пути.
+   Без манифеста выполни
    `graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html`.
    Для небольшого графа создай индекс командой
    `graphify-1c index build graphify-out/graph.json graphify-out/graph.sqlite`.
-2. Найди узел: `graphify-1c index search graphify-out/graph.sqlite '<имя>'`.
+2. Найди узел: `graphify-1c index search '<индекс>' '<имя>'`.
    Выбери точный ID по `kind`, `source_type`, `extension_name` и пути.
-3. Сначала получи счётчики через `graphify-1c index groups graphify-out/graph.sqlite '<id>' --direction in`.
+3. Сначала получи счётчики через `graphify-1c index groups '<индекс>' '<id>' --direction in`.
    Затем запрашивай конкретный тип связей страницами по 10:
-   `graphify-1c index neighbors graphify-out/graph.sqlite '<id>' --direction in --relation calls --limit 10 --offset 0`.
+   `graphify-1c index neighbors '<индекс>' '<id>' --direction in --relation calls --limit 10 --offset 0`.
    Для всех мест использования продолжай `--offset 10`, `20` и далее до пустой
    страницы; проверь нужные отношения (`calls`, `references`, `type_reference`,
    `query_reads`, `writes`, `EXTENDS`, `BEFORE`, `AFTER`, `INSTEAD`, `CHANGE_CONTROL`).
 4. Если связей тысячи, запиши полный перечень через
-   `graphify-1c index export graphify-out/graph.sqlite '<id>' graphify-out/usages.jsonl --direction in --relation calls`.
+   `graphify-1c index export '<индекс>' '<id>' graphify-out/usages.jsonl --direction in --relation calls`.
    Читай из JSONL только нужные строки. Не выводи файл или `graph.json` целиком
    в диалог. Ответы команд ограничены 12 КиБ.
 5. Проверь важные выводы по `source_file` и `start_line` в XML/BSL. Укажи тип

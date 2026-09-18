@@ -394,6 +394,9 @@ def test_init_project_reuses_one_install_for_separate_projects(tmp_path):
     second = tmp_path / "second"
     shutil.copytree(FIXTURE, first / "src" / "cf")
     shutil.copytree(FIXTURE, second / "src" / "cf")
+    manifest = first / "graphify-out" / ".graphify_onec.json"
+    manifest.parent.mkdir()
+    manifest.write_text('{"extensions": ["selected"], "html": "external.html"}', encoding="utf-8")
     (first / "AGENTS.md").write_text("# Existing rules\n", encoding="utf-8")
     init_project(first, ["codex", "claude", "vscode"])
     init_project(second, ["codex"])
@@ -401,6 +404,9 @@ def test_init_project_reuses_one_install_for_separate_projects(tmp_path):
     assert first_rules.startswith("# Existing rules")
     assert first_rules.count("<!-- graphify-1c:start -->") == 1
     assert "graphify-1c index groups" in first_rules
+    assert "graphify-out/.graphify_onec.json" in first_rules
+    assert "не включай их без запроса" in first_rules
+    assert '"selected"' in manifest.read_text(encoding="utf-8")
     assert (first / "CLAUDE.md").exists()
     assert (first / ".github" / "copilot-instructions.md").exists()
     assert (second / "AGENTS.md").exists()
