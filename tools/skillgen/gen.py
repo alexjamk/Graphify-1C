@@ -545,6 +545,11 @@ def _render_core(platform: Platform) -> str:
         .replace("@@HOOKS_TARGET@@", platform.hooks_target)
         .replace("@@EXTRA@@", extra)
     )
+    if platform.key == "agents":
+        intro = _read_fragment("extra/onec-agents-intro.md").rstrip("\n") + "\n\n"
+        route = _read_fragment("extra/onec-agents-route.md").rstrip("\n") + "\n\n"
+        body = body.replace("# /graphify\n\n", "# /graphify\n" + intro, 1)
+        body = body.replace("## What graphify is for", route + "## What graphify is for", 1)
     if "@@" in body:
         leftover = sorted(set(re.findall(r"@@\w+@@", body)))
         raise ValueError(f"unfilled core slots for '{platform.key}': {leftover}")

@@ -277,7 +277,11 @@ def test_descriptions_are_unified():
     platforms = gen.load_platforms()
     for key, p in platforms.items():
         body = gen.render(p)[0].content
-        assert expected_line in body, f"[{key}] missing the unified description line"
+        if key == "agents":
+            assert f'description: "{p.description}"' in body
+            assert "For 1C Configurator/EDT exports" in p.description
+        else:
+            assert expected_line in body, f"[{key}] missing the unified description line"
         # None of the drifted v8 wording may survive on any platform.
         assert "Provides persistent graph with god nodes" not in body, f"[{key}] kept old wording"
         assert "treat the question as a /graphify query." not in body, f"[{key}] kept old wording"
@@ -1039,7 +1043,7 @@ def test_agents_renders_its_own_agents_md_hooks_wording():
 
 
 def test_agents_body_matches_amp_modulo_hooks_wording():
-    """The agents skill body is amp's body verbatim (it re-homes amp's bundle).
+    """The agents skill retains amp's generic body and adds the 1C route.
 
     The two platforms differ only in the hooks reference's install/uninstall
     command wording — everything else (core, query, extraction spec, the other
@@ -1049,8 +1053,16 @@ def test_agents_body_matches_amp_modulo_hooks_wording():
     platforms = gen.load_platforms()
     amp = {a.path.rsplit("/", 1)[-1]: a.content for a in gen.render(platforms["amp"])}
     agents = {a.path.rsplit("/", 1)[-1]: a.content for a in gen.render(platforms["agents"])}
-    # The lean-core skill body is identical (frontmatter + steps, no hooks ref).
-    assert amp["skill-amp.md"] == agents["skill-agents.md"]
+    intro = gen._read_fragment("extra/onec-agents-intro.md").rstrip("\n") + "\n\n"
+    route = gen._read_fragment("extra/onec-agents-route.md").rstrip("\n") + "\n\n"
+    assert "## 1С: рабочий маршрут агента" in agents["skill-agents.md"]
+    generic = agents["skill-agents.md"].replace(intro, "\n", 1).replace(route, "", 1)
+    generic = generic.replace(
+        f'description: "{platforms["agents"].description}"',
+        f'description: "{UNIFIED_DESCRIPTION}"',
+        1,
+    )
+    assert amp["skill-amp.md"] == generic
     # Every reference except hooks.md is byte-identical.
     for name in amp:
         if name in ("skill-amp.md", "hooks.md"):

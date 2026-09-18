@@ -1,9 +1,11 @@
 ---
 name: graphify
-description: "Use for any question about a codebase, its architecture, file relationships, or project content — especially when graphify-out/ exists, where the question should be treated as a graphify query first. Turns any input (code, docs, papers, images, videos) into a persistent knowledge graph with god nodes, community detection, and query/path/explain tools."
+description: "Use for questions about a codebase, architecture, file relationships, or project content. For 1C Configurator/EDT exports, query the metadata, BSL, configuration, and extension graph through the disk-backed index first. For other projects, use the general Graphify graph of code, docs, papers, images, and videos."
 ---
 
 # /graphify
+
+> **Проекты 1С:** этот форк сохраняет общий сценарий Graphify ниже и добавляет отдельный маршрут для выгрузок 1С. Для них сначала прочитайте раздел «1С: рабочий маршрут агента». `graphify-1c update` распознаёт 1С и перестраивает её граф; универсальные `query` и MCP-сервер не используют специализированный SQLite-индекс 1С. Команда форка при отдельной установке называется `graphify-1c`.
 
 Turn any folder of files into a navigable knowledge graph with community detection, an honest audit trail, and three outputs: interactive HTML, GraphRAG-ready JSON, and a plain-language GRAPH_REPORT.md.
 
@@ -41,6 +43,18 @@ Turn any folder of files into a navigable knowledge graph with community detecti
 /graphify path "AuthModule" "Database"                # shortest path between two concepts
 /graphify explain "SwinTransformer"                   # plain-language explanation of a node
 ```
+
+## 1С: рабочий маршрут агента
+
+Выбирайте этот маршрут, когда задача касается выгрузки Конфигуратора/EDT (`src/cf`, `src/cfe/*` или явный путь к выгрузке). Он имеет приоритет над универсальным «Fast path — existing graph» ниже: наличие `graphify-out/graph.json` само по себе не означает, что граф 1С актуален. Для остальных проектов сохраняйте универсальные шаги этого навыка.
+
+1. Если индекс уже создан и исходники с тех пор не менялись, начните с точечного запроса, не перечитывайте всю конфигурацию. Если графа нет, из корня проекта выполните `graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html`. Для нестандартной структуры передайте корень конфигурации и несколько `--extension`. Для большого графа анализ автоматически создаёт SQLite рядом с HTML; иначе выполните `graphify-1c index build graphify-out/graph.json graphify-out/graph.sqlite`. Если исходники изменились, выполните `graphify-1c update .`: команда сохранит выбор расширений и пути результатов предыдущего анализа и полностью перестроит граф 1С. Без предыдущего анализа она обнаружит стандартную структуру. Если пользователь вызвал `/graphify --update` для проекта 1С, выполните именно `graphify-1c update .`, затем переходите к точечным запросам индекса; универсальный конвейер ниже для этого шага не запускайте.
+2. Найдите точный ID: `graphify-1c index search graphify-out/graph.sqlite 'ЗаказКлиента'`. Если совпадений много, используйте `--limit 20 --offset 20`, затем выберите узел по `kind`, `source_type`, `extension_name` и пути. ID расширения отличается от ID основной конфигурации.
+3. Запрашивайте одну группу связей за раз: `graphify-1c index neighbors graphify-out/graph.sqlite '<точный ID>' --direction in --relation calls --limit 100 --offset 0`. Для всех мест использования переходите к следующей странице (`--offset 100`, `200`, …), пока ответ не станет пустым. Проверяйте отдельно нужные типы: `calls`, `references`, `type_reference`, `query_reads`, `writes`, `handler`, `uses_command`, `EXTENDS`, `BEFORE`, `AFTER`, `INSTEAD`, `CHANGE_CONTROL`. Для исходящих зависимостей используйте `--direction out`. Входящая `contains` показывает владельца узла; исходящая — его состав.
+4. Метаданные здесь равноправны с BSL: конфигурация связана с объектами через `contains`, объекты — с реквизитами, табличными частями, формами и модулями; модуль содержит методы. Отдельная вершина расширения также содержит свои объекты. Заимствование связывается с основной конфигурацией через `EXTENDS`, перехват метода — соответствующей связью к базовому методу. При нескольких расширениях перечислите каждое отдельно. Собственный объект расширения может не иметь `EXTENDS`.
+5. Покажите короткий результат с ID, типом связи, происхождением, файлом и строкой. Для важных выводов откройте указанный XML/BSL-фрагмент. `INFERRED` и `AMBIGUOUS` требуют проверки; отсутствие ребра не доказывает отсутствия динамического использования. Не отправляйте в контекст весь `graph.json`, длинные списки узлов или целые модули. Для просмотра используйте `graphify-1c serve graphify-out/graph.html`.
+
+Запросы `graphify-1c explain/path/query` относятся к общему JSON API и могут загрузить большой 1С-граф в память. Универсальные функции Graphify (документы, медиа, кластеризация, wiki, экспорт, MCP и прочее) остаются доступны для универсального графа; они не включаются автоматически в граф метаданных 1С. Подробные команды и сценарии: `docs/1c/QUICKSTART_AGENTS.md` и `docs/1c/AGENT_WORKFLOW.md` этого форка.
 
 ## What graphify is for
 

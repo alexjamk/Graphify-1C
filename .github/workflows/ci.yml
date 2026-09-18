@@ -18,11 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # The audit-coverage, monolith-roundtrip, and always-on-roundtrip
-          # validators read blobs from origin/v8. A shallow checkout omits that
-          # ref, so fetch the full history here and the validators run for real
-          # (rather than skipping). The other jobs stay shallow.
+          # The fork has its own history; the validators need upstream v8 blobs.
           fetch-depth: 0
+
+      - name: Fetch upstream v8 validation baseline
+        run: git fetch --no-tags https://github.com/Graphify-Labs/graphify.git v8:refs/remotes/origin/v8
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
@@ -55,10 +55,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # test_skillgen.py reads pre-split skill bodies from the immutable
-          # baseline commit via `git show`; a shallow checkout omits that history
-          # and the baseline tests fail. Full history mirrors the skillgen-check job.
+          # test_skillgen.py reads pre-split skill bodies from upstream v8.
           fetch-depth: 0
+
+      - name: Fetch upstream v8 validation baseline
+        run: git fetch --no-tags https://github.com/Graphify-Labs/graphify.git v8:refs/remotes/origin/v8
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
