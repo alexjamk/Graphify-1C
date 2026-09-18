@@ -6,12 +6,15 @@ import subprocess
 import sys
 
 import networkx as nx
+import pytest
 
 from graphify.export import to_json
 from graphify.onec import extract_project
 from graphify.onec.graph import build_onec_graph
-from graphify.onec.index import build_index, neighbors, search
+from graphify.onec.export import write_onec_json
+from graphify.onec.index import build_index, neighbors, search, shortest_path, explain
 from graphify.onec.viewer import write_onec_html
+from graphify.onec.update import _manifest_for, remember_analysis
 from graphify.validate import validate_extraction
 
 
@@ -269,7 +272,10 @@ def test_disk_index_queries_graph_without_loading_json(tmp_path):
     )
     assert build_index(graph_path, database)["edges"] == 1
     assert len(search(database, "Заказ")) == 2
+
+
     assert len(search(database, "заказ")) == 2
+    assert len(search(database, "аказ")) == 2
     assert len(search(database, "Заказ", limit=1, offset=0)) == 1
     assert len(search(database, "Заказ", limit=1, offset=1)) == 1
     assert search(database, "Заказ", limit=1, offset=2) == []
@@ -279,6 +285,61 @@ def test_disk_index_queries_graph_without_loading_json(tmp_path):
     assert links[0]["source_extension"] == "Тест"
     assert links[0]["target_type"] == "configuration"
     assert neighbors(database, "1c://Document/Заказ", direction="in", offset=1) == []
+    broken = tmp_path / "broken.json"
+    broken.write_text('{"nodes": [], "links": []}\n', encoding="utf-8")
+    with pytest.raises(ValueError):
+        build_index(broken, database)
+    assert len(search(database, "Заказ")) == 2
+
+
+def test_streamed_large_graph_builds_disk_index(tmp_path):
+    extraction = {
+        "nodes": [
+            {"id": f"1c://Document/{number}", "label": f"Документ {number}",
+             "kind": "Document", "source_type": "configuration", "extension_name": None}
+            for number in range(5001)
+        ],
+        "edges": [
+            {"source": "1c://Document/0", "target": "1c://Document/1",
+             "relation": "references", "confidence": "EXTRACTED"},
+            {"source": "1c://Document/0", "target": "1c://Document/1",
+             "relation": "references", "confidence": "INFERRED"},
+        ],
+    }
+    extraction["nodes"].append({"id": "1c://Document/0", "label": "Первый документ"})
+    output = tmp_path / "graph.json"
+    database = tmp_path / "graph.sqlite"
+    write_onec_json(extraction, output)
+    data = json.loads(output.read_text(encoding="utf-8"))
+    assert data["directed"] and data["multigraph"]
+    assert len(data["nodes"]) == 5001
+    assert next(node for node in data["nodes"] if node["id"] == "1c://Document/0")["kind"] == "Document"
+    assert len(data["links"]) == 1
+    assert data["links"][0]["confidence"] == "INFERRED"
+    assert data["links"][0]["key"] == "references"
+    assert build_index(output, database)["nodes"] == 5001
+    assert search(database, "Документ 5000")[0]["id"] == "1c://Document/5000"
+    path = shortest_path(database, "1c://Document/0", "1c://Document/1")
+    assert path["found"] and path["path"][0]["relation"] == "references"
+    assert not shortest_path(database, "1c://Document/1", "1c://Document/0")["found"]
+    summary = explain(database, "1c://Document/0", sample=1)
+    assert summary["node"]["label"] == "Первый документ"
+    assert summary["groups"][0]["relation"] == "references"
+    generic = subprocess.run(
+        [sys.executable, "-m", "graphify", "path", "1c://Document/0", "1c://Document/1",
+         "--graph", str(output)], capture_output=True, text=True,
+    )
+    assert generic.returncode == 0, generic.stderr
+    explanation = subprocess.run(
+        [sys.executable, "-m", "graphify", "explain", "1c://Document/0",
+         "--graph", str(output)], capture_output=True, text=True,
+    )
+    assert explanation.returncode == 0, explanation.stderr
+    query = subprocess.run(
+        [sys.executable, "-m", "graphify", "query", "Документ 0",
+         "--graph", str(output)], capture_output=True, text=True,
+    )
+    assert query.returncode == 0, query.stderr
 
 
 def test_update_rebuilds_onec_graph_and_preserves_extensions(tmp_path):
@@ -311,6 +372,16 @@ def test_update_rebuilds_onec_graph_and_preserves_extensions(tmp_path):
     assert any(node["id"].endswith("/НовыйМетод") for node in after["nodes"])
     assert any(node.get("source_type") == "extension" for node in after["nodes"])
     assert html.exists()
+    previous_json = output.read_bytes()
+    previous_html = html.read_bytes()
+    (extension / "Configuration.xml").unlink()
+    failed = subprocess.run(
+        [sys.executable, "-m", "graphify", "update", "."],
+        cwd=project, capture_output=True, text=True, env=env,
+    )
+    assert failed.returncode != 0
+    assert output.read_bytes() == previous_json
+    assert html.read_bytes() == previous_html
 
 
 def test_update_detects_onec_project_without_previous_analyze(tmp_path):
@@ -328,6 +399,15 @@ def test_update_detects_onec_project_without_previous_analyze(tmp_path):
     assert (project / "graphify-out" / "graph.html").exists()
     nodes = json.loads((project / "graphify-out" / "graph.json").read_text(encoding="utf-8"))["nodes"]
     assert any(node.get("source_type") == "extension" for node in nodes)
+
+
+def test_direct_cf_analysis_registers_project_root(tmp_path):
+    root = tmp_path / "project"
+    cf = root / "src" / "cf"
+    cf.mkdir(parents=True)
+    remember_analysis(cf, [], root / "reports" / "graph.json", None)
+    assert (root / "graphify-out" / ".graphify_onec.json").exists()
+    assert _manifest_for(root.resolve())["root"] == str(cf.resolve())
 
 
 def test_parallel_onec_relations_survive_graph_build(tmp_path):

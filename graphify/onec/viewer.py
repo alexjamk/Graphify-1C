@@ -33,6 +33,19 @@ def _safe_json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 
 
+def write_large_onec_html(
+    graph_path: Path, output_path: Path, node_count: int, edge_count: int
+) -> None:
+    """Build the large viewer without materializing a NetworkX graph."""
+    from graphify.onec.serve import write_viewer_page
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    database = output_path.with_suffix(".sqlite")
+    build_index(graph_path, database)
+    write_viewer_page(output_path, node_count, edge_count, database)
+
+
 def write_onec_html(
     graph: nx.Graph,
     output_path: Path,
@@ -47,11 +60,9 @@ def write_onec_html(
     if large:
         if graph_path is None:
             raise ValueError("large 1C viewer requires the saved graph JSON path")
-        database = output_path.with_suffix(".sqlite")
-        build_index(graph_path, database)
-        from graphify.onec.serve import write_viewer_page
-
-        write_viewer_page(output_path, graph.number_of_nodes(), graph.number_of_edges(), database)
+        write_large_onec_html(
+            graph_path, output_path, graph.number_of_nodes(), graph.number_of_edges()
+        )
         return
     overview_name = None
     to_html(graph, cluster(graph), str(output_path), node_limit=node_limit)

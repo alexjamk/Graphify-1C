@@ -9,13 +9,14 @@ import sys
 
 from graphify.export import to_json
 from graphify.onec.graph import build_onec_graph
+from graphify.onec.export import write_onec_json
 from graphify.onec.project import extract_project
-from graphify.onec.viewer import write_onec_html
+from graphify.onec.viewer import write_large_onec_html, write_onec_html
 from graphify.onec.update import remember_analysis
 from graphify.validate import assert_valid
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None, *, record_manifest: bool = True) -> None:
     parser = argparse.ArgumentParser(prog="graphify analyze")
     parser.add_argument(
         "root", type=Path, help="1C project, Configurator XML export or EDT directory"
@@ -32,18 +33,25 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     extraction = extract_project(args.root, extensions=args.extension)
     assert_valid(extraction)
-    graph = build_onec_graph(extraction)
+    node_count = len(extraction["nodes"])
+    edge_count = len(extraction["edges"])
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    to_json(graph, {}, str(args.out), force=True)
+    if node_count > 5000:
+        node_count, edge_count = write_onec_json(extraction, args.out)
+    else:
+        graph = build_onec_graph(extraction)
+        to_json(graph, {}, str(args.out), force=True)
     if args.html:
-        write_onec_html(graph, args.html, graph_path=args.out)
-        if graph.number_of_nodes() > 5000:
+        if node_count > 5000:
+            write_large_onec_html(args.out, args.html, node_count, edge_count)
             print(
                 f"Large viewer: {args.html} + {args.html.with_suffix('.sqlite')}; "
                 f"run graphify-1c serve {args.html}"
             )
+        else:
+            write_onec_html(graph, args.html, graph_path=args.out)
     print(
-        f"1C graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges → {args.out}"
+        f"1C graph: {node_count} nodes, {edge_count} edges → {args.out}"
     )
     stats = extraction["diagnostics"]
     calls = stats["calls_resolved"]
@@ -76,4 +84,5 @@ def main(argv: list[str] | None = None) -> None:
             + ", ".join(f"{status}={count}" for status, count in sorted(issues.items())),
             file=sys.stderr,
         )
-    remember_analysis(args.root, args.extension, args.out, args.html)
+    if record_manifest:
+        remember_analysis(args.root, args.extension, args.out, args.html)

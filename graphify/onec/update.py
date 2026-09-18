@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from uuid import uuid4
 
 from graphify.onec.project import _is_project_export, _project_layout
 
@@ -15,7 +17,12 @@ def remember_analysis(
 ) -> None:
     """Save the exact source selection and outputs for a later `update`."""
     source_root = root.resolve()
-    project_root = source_root.parent if source_root.name.casefold() == "src" else source_root
+    if source_root.name.casefold() == "src":
+        project_root = source_root.parent
+    elif source_root.name.casefold() == "cf" and source_root.parent.name.casefold() == "src":
+        project_root = source_root.parent.parent
+    else:
+        project_root = source_root
     manifest = {
         "version": 1,
         "project_root": str(project_root),
@@ -63,13 +70,38 @@ def update_project(path: Path) -> None:
     path = path.resolve()
     manifest = _manifest_for(path)
     if manifest:
-        args = [manifest["root"]]
-        for extension in manifest.get("extensions", []):
-            args.extend(("--extension", extension))
-        args.extend(("--out", manifest["out"]))
-        if manifest.get("html"):
-            args.extend(("--html", manifest["html"]))
+        root = Path(manifest["root"])
+        extensions = [Path(item) for item in manifest.get("extensions", [])]
+        out = Path(manifest["out"])
+        html = Path(manifest["html"]) if manifest.get("html") else None
     else:
-        args = [str(path), "--out", "graphify-out/graph.json", "--html", "graphify-out/graph.html"]
+        root = path
+        extensions = []
+        out = Path("graphify-out/graph.json").resolve()
+        html = Path("graphify-out/graph.html").resolve()
+    token = uuid4().hex
+    temporary_json = out.with_name(f".{out.stem}.{token}.tmp{out.suffix}")
+    temporary_html = (
+        html.with_name(f".{html.stem}.{token}.tmp{html.suffix}") if html else None
+    )
+    args = [str(root)]
+    for extension in extensions:
+        args.extend(("--extension", str(extension)))
+    args.extend(("--out", str(temporary_json)))
+    if temporary_html:
+        args.extend(("--html", str(temporary_html)))
     print("Updating 1C metadata and BSL graph (full rebuild)...")
-    main(args)
+    try:
+        main(args, record_manifest=False)
+        os.replace(temporary_json, out)
+        if temporary_html and html:
+            for suffix in (".sqlite", ".overview.json", ".html"):
+                source = temporary_html.with_suffix(suffix)
+                if source.exists():
+                    os.replace(source, html.with_suffix(suffix))
+        remember_analysis(root, extensions, out, html)
+    finally:
+        temporary_json.unlink(missing_ok=True)
+        if temporary_html:
+            for suffix in (".sqlite", ".overview.json", ".html"):
+                temporary_html.with_suffix(suffix).unlink(missing_ok=True)

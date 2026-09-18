@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
+from collections import deque
+from contextlib import closing
 from pathlib import Path
 from time import perf_counter
+from uuid import uuid4
 
 
 NODE_FIELDS = {"id", "label", "kind", "source_file", "start_line", "source_type", "extension_name"}
@@ -49,13 +53,13 @@ def _records(path: Path):
             record[key] = json.loads(raw)
 
 
-def build_index(graph_path: Path, db_path: Path) -> dict[str, int | float]:
-    """Build a queryable index with bounded Python memory use."""
+def _build_index_file(graph_path: Path, db_path: Path) -> dict[str, int | float]:
+    """Populate a new SQLite file with bounded Python memory use."""
     graph_path = Path(graph_path)
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     started = perf_counter()
-    with sqlite3.connect(db_path) as db:
+    with closing(sqlite3.connect(db_path)) as db:
         db.executescript(
             """
             PRAGMA journal_mode=WAL;
@@ -123,20 +127,59 @@ def build_index(graph_path: Path, db_path: Path) -> dict[str, int | float]:
             CREATE INDEX nodes_extension ON nodes(extension_name);
             """
         )
+        try:
+            db.execute(
+                "CREATE VIRTUAL TABLE nodes_fts USING fts5("
+                "norm_label, norm_id, content='nodes', content_rowid='rowid', tokenize='trigram')"
+            )
+            db.execute(
+                "INSERT INTO nodes_fts(rowid,norm_label,norm_id) "
+                "SELECT rowid,norm_label,norm_id FROM nodes"
+            )
+        except sqlite3.OperationalError as exc:
+            if "no such tokenizer" not in str(exc).lower() and "no such module" not in str(exc).lower():
+                raise
         db.commit()
     return {"nodes": nodes, "edges": edges, "seconds": round(perf_counter() - started, 2)}
+
+
+def build_index(graph_path: Path, db_path: Path) -> dict[str, int | float]:
+    """Replace the published index only after a complete successful build."""
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = db_path.with_name(f".{db_path.name}.{uuid4().hex}.tmp")
+    try:
+        result = _build_index_file(graph_path, temporary)
+        os.replace(temporary, db_path)
+        return result
+    finally:
+        temporary.unlink(missing_ok=True)
+        temporary.with_name(temporary.name + "-wal").unlink(missing_ok=True)
+        temporary.with_name(temporary.name + "-shm").unlink(missing_ok=True)
 
 
 def search(db_path: Path, term: str, limit: int = 20, offset: int = 0) -> list[dict]:
     if limit < 1 or offset < 0:
         raise ValueError("limit must be positive and offset non-negative")
-    with sqlite3.connect(db_path) as db:
+    with closing(sqlite3.connect(db_path)) as db:
         db.row_factory = sqlite3.Row
-        rows = db.execute(
-            "SELECT id,label,kind,source_file,start_line,source_type,extension_name "
-            "FROM nodes WHERE norm_label LIKE ? OR norm_id LIKE ? ORDER BY id LIMIT ? OFFSET ?",
-            (f"%{term.casefold()}%", f"%{term.casefold()}%", limit, offset),
-        )
+        normalized = term.casefold()
+        has_fts = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='nodes_fts'"
+        ).fetchone() is not None
+        if has_fts and len(normalized) >= 3:
+            rows = db.execute(
+                "SELECT n.id,n.label,n.kind,n.source_file,n.start_line,n.source_type,n.extension_name "
+                "FROM nodes_fts JOIN nodes n ON n.rowid=nodes_fts.rowid "
+                "WHERE nodes_fts MATCH ? ORDER BY n.id LIMIT ? OFFSET ?",
+                ('"' + normalized.replace('"', '""') + '"', limit, offset),
+            )
+        else:
+            rows = db.execute(
+                "SELECT id,label,kind,source_file,start_line,source_type,extension_name "
+                "FROM nodes WHERE norm_label LIKE ? OR norm_id LIKE ? ORDER BY id LIMIT ? OFFSET ?",
+                (f"%{normalized}%", f"%{normalized}%", limit, offset),
+            )
         return [dict(row) for row in rows]
 
 
@@ -177,9 +220,77 @@ def neighbors(
         parameters.append(relation)
     sql += " ORDER BY e.rowid LIMIT ? OFFSET ?"
     parameters.extend((limit, offset))
-    with sqlite3.connect(db_path) as db:
+    with closing(sqlite3.connect(db_path)) as db:
         db.row_factory = sqlite3.Row
         return [dict(row) for row in db.execute(sql, parameters)]
+
+
+def shortest_path(
+    db_path: Path,
+    source: str,
+    target: str,
+    *,
+    max_hops: int = 6,
+    max_visited: int = 50000,
+) -> dict:
+    """Find a directed path using SQLite edge indexes and bounded Python state."""
+    if max_hops < 0 or max_visited < 1:
+        raise ValueError("max_hops must be non-negative and max_visited positive")
+    with closing(sqlite3.connect(db_path)) as db:
+        db.row_factory = sqlite3.Row
+        for node_id in (source, target):
+            if db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,)).fetchone() is None:
+                raise KeyError(node_id)
+        queue = deque([(source, 0)])
+        previous: dict[str, tuple[str, str] | None] = {source: None}
+        while queue and target not in previous:
+            current, depth = queue.popleft()
+            if depth >= max_hops:
+                continue
+            for row in db.execute(
+                "SELECT target,relation FROM edges WHERE source=? ORDER BY rowid", (current,)
+            ):
+                neighbor = row["target"]
+                if neighbor in previous:
+                    continue
+                if len(previous) >= max_visited:
+                    return {"found": False, "truncated": True, "visited": len(previous), "path": []}
+                previous[neighbor] = (current, row["relation"])
+                queue.append((neighbor, depth + 1))
+                if neighbor == target:
+                    break
+        if target not in previous:
+            return {"found": False, "truncated": False, "visited": len(previous), "path": []}
+        route = []
+        current = target
+        while current != source:
+            predecessor, relation = previous[current]
+            route.append({"source": predecessor, "target": current, "relation": relation})
+            current = predecessor
+        route.reverse()
+        return {"found": True, "truncated": False, "visited": len(previous), "path": route}
+
+
+def explain(db_path: Path, node_id: str, *, sample: int = 20) -> dict:
+    """Return bounded node context from SQLite for an agent."""
+    from graphify.onec.serve import neighbor_groups
+
+    if sample < 0:
+        raise ValueError("sample must be non-negative")
+    with closing(sqlite3.connect(db_path)) as db:
+        db.row_factory = sqlite3.Row
+        row = db.execute(
+            "SELECT id,label,kind,source_file,start_line,source_type,extension_name "
+            "FROM nodes WHERE id=?", (node_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(node_id)
+        node = dict(row)
+    return {
+        "node": node,
+        "groups": neighbor_groups(db_path, node_id),
+        "sample": neighbors(db_path, node_id, limit=sample) if sample else [],
+    }
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -200,6 +311,16 @@ def main(argv: list[str] | None = None) -> None:
     adjacent.add_argument("--relation")
     adjacent.add_argument("--limit", type=int, default=100)
     adjacent.add_argument("--offset", type=int, default=0)
+    route = sub.add_parser("path")
+    route.add_argument("database", type=Path)
+    route.add_argument("source")
+    route.add_argument("target")
+    route.add_argument("--max-hops", type=int, default=6)
+    route.add_argument("--max-visited", type=int, default=50000)
+    summary = sub.add_parser("explain")
+    summary.add_argument("database", type=Path)
+    summary.add_argument("node_id")
+    summary.add_argument("--sample", type=int, default=20)
     args = parser.parse_args(argv)
     if args.command == "build":
         print(json.dumps(build_index(args.graph, args.database), ensure_ascii=False))
@@ -211,6 +332,19 @@ def main(argv: list[str] | None = None) -> None:
                 indent=2,
             )
         )
+    elif args.command == "path":
+        print(
+            json.dumps(
+                shortest_path(
+                    args.database, args.source, args.target,
+                    max_hops=args.max_hops, max_visited=args.max_visited,
+                ),
+                ensure_ascii=False, indent=2,
+            )
+        )
+    elif args.command == "explain":
+        print(json.dumps(explain(args.database, args.node_id, sample=args.sample),
+                         ensure_ascii=False, indent=2))
     else:
         print(
             json.dumps(

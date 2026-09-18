@@ -6,6 +6,7 @@ import argparse
 from html import escape
 import json
 import sqlite3
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -49,7 +50,7 @@ def write_viewer_page(
 
 def build_overview(database: Path) -> dict:
     """Summarize node kinds and relation counts without exporting graph records."""
-    with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)) as db:
         counts = db.execute(
             "SELECT kind,COUNT(*) FROM nodes WHERE kind IS NOT NULL "
             "GROUP BY kind ORDER BY COUNT(*) DESC"
@@ -134,7 +135,7 @@ def build_overview(database: Path) -> dict:
 
 
 def group_examples(database: Path, kind: str, limit: int = 30) -> list[dict]:
-    with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)) as db:
         db.row_factory = sqlite3.Row
         return [
             dict(row)
@@ -159,20 +160,31 @@ def search_nodes(
         return []
     # Escape LIKE metacharacters so a user's name is searched literally.
     escaped = term.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)) as db:
         db.row_factory = sqlite3.Row
-        sql = (
-            "SELECT id,label,kind,source_file,start_line,source_type,extension_name "
-            "FROM nodes WHERE (norm_label LIKE ? ESCAPE '\\' OR norm_id LIKE ? ESCAPE '\\')"
-        )
-        parameters: list[str | int] = [f"%{escaped}%", f"%{escaped}%"]
+        has_fts = len(term) >= 3 and db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='nodes_fts'"
+        ).fetchone() is not None
+        fields = "n.id,n.label,n.kind,n.source_file,n.start_line,n.source_type,n.extension_name"
+        if has_fts:
+            sql = (
+                f"SELECT {fields} FROM nodes_fts JOIN nodes n ON n.rowid=nodes_fts.rowid "
+                "WHERE nodes_fts MATCH ?"
+            )
+            parameters: list[str | int] = ['"' + term.casefold().replace('"', '""') + '"']
+        else:
+            sql = (
+                f"SELECT {fields} FROM nodes n "
+                "WHERE (n.norm_label LIKE ? ESCAPE '\\' OR n.norm_id LIKE ? ESCAPE '\\')"
+            )
+            parameters = [f"%{escaped}%", f"%{escaped}%"]
         if source == "configuration":
-            sql += " AND source_type='configuration'"
+            sql += " AND n.source_type='configuration'"
         elif source:
-            sql += " AND extension_name=?"
+            sql += " AND n.extension_name=?"
             parameters.append(source)
         if kind:
-            sql += " AND kind=?"
+            sql += " AND n.kind=?"
             parameters.append(kind)
         sql += " LIMIT ?"
         parameters.append(min(limit, 30))
@@ -180,7 +192,7 @@ def search_nodes(
 
 
 def filter_options(database: Path) -> dict[str, list[str]]:
-    with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)) as db:
         return {
             "relations": [
                 row[0]
@@ -226,7 +238,7 @@ def neighbor_groups(
     if direction not in ("both", "in", "out"):
         raise ValueError("invalid direction")
     groups = []
-    with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)) as db:
         if db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,)).fetchone() is None:
             raise KeyError(node_id)
         for side, column in (("out", "source"), ("in", "target")):
@@ -271,7 +283,7 @@ def neighbor_page(
         f"FROM edges e JOIN nodes n ON n.id=e.{other} WHERE e.{column}=? AND e.relation=?" + extra
     )
     params = [node_id, relation, *extra_params]
-    with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)) as db:
         db.row_factory = sqlite3.Row
         focus = db.execute(
             "SELECT id,label,kind,source_file,start_line,source_type,extension_name "
@@ -340,7 +352,7 @@ def neighborhood(
     frontier = [node_id]
     edges: list[dict] = []
     truncated = False
-    with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)) as db:
         db.row_factory = sqlite3.Row
         if db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,)).fetchone() is None:
             raise KeyError(node_id)
