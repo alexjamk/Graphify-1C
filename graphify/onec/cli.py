@@ -30,8 +30,13 @@ def main(argv: list[str] | None = None, *, record_manifest: bool = True) -> None
     )
     parser.add_argument("--out", type=Path, default=Path("graphify-out/graph.json"))
     parser.add_argument("--html", type=Path, help="write interactive Graphify HTML")
+    parser.add_argument("--no-cache", action="store_true", help="parse every BSL module from source")
     args = parser.parse_args(argv)
-    extraction = extract_project(args.root, extensions=args.extension)
+    timings: dict[str, float] = {}
+    cache_path = None if args.no_cache else args.out.parent / ".graphify-onec-modules.sqlite"
+    extraction = extract_project(
+        args.root, extensions=args.extension, timings=timings, module_cache=cache_path
+    )
     assert_valid(extraction)
     node_count = len(extraction["nodes"])
     edge_count = len(extraction["edges"])
@@ -53,6 +58,11 @@ def main(argv: list[str] | None = None, *, record_manifest: bool = True) -> None
     print(
         f"1C graph: {node_count} nodes, {edge_count} edges → {args.out}"
     )
+    if cache_path:
+        print(
+            f"BSL cache: {int(timings.get('bsl_cache_hits', 0))} reused, "
+            f"{int(timings.get('bsl_cache_misses', 0))} parsed"
+        )
     stats = extraction["diagnostics"]
     calls = stats["calls_resolved"]
     print(

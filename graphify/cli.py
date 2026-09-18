@@ -2460,7 +2460,7 @@ def dispatch_command(cmd: str) -> None:
         if is_onec_project(watch_path):
             if no_cluster:
                 print("1C update ignores --no-cluster; the 1C graph uses its own viewer.")
-            update_project(watch_path)
+            update_project(watch_path, force=force)
             return
         from graphify.watch import _rebuild_code
 

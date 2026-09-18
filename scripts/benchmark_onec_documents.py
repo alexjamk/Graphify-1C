@@ -160,7 +160,7 @@ def graph_type(database: Path, document: str, attribute: str) -> set[str]:
 
 def source_type(src: Path, document: str, attribute: str) -> set[str]:
     metadata = src / "cf" / "Documents" / f"{document}.xml"
-    lines = rg(f"<Name>{attribute}</Name>", [metadata], "-n", "-A", "12", "-F")
+    lines = rg(f"<Name>{attribute}</Name>", [metadata], "-n", "-A", "20", "-F")
     return set(re.findall(r"cfg:(CatalogRef\.[\w]+)", "\n".join(lines)))
 
 

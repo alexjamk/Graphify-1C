@@ -26,6 +26,37 @@ EXTENSION = Path(__file__).parent / "fixtures" / "onec_extension"
 EDT = Path(__file__).parent / "fixtures" / "onec_edt"
 
 
+def test_bsl_cache_reuses_unchanged_modules_and_invalidates_metadata(tmp_path):
+    root = tmp_path / "cf"
+    shutil.copytree(FIXTURE, root)
+    for module in root.rglob("*.bsl"):
+        module.write_bytes(module.read_bytes() + b"\n" + b" " * 4096)
+    cache = tmp_path / "modules.sqlite"
+    first_timings = {}
+    cold = extract_project(root, module_cache=cache, timings=first_timings)
+    assert first_timings["bsl_cache_misses"] >= 2
+    second_timings = {}
+    warm = extract_project(root, module_cache=cache, timings=second_timings)
+    assert cold == warm
+    assert second_timings["bsl_cache_hits"] == first_timings["bsl_cache_misses"]
+    assert second_timings["bsl_cache_misses"] == 0
+
+    module = root / "Documents" / "ЗаказКлиента" / "Ext" / "ObjectModule.bsl"
+    module.write_text(module.read_text(encoding="utf-8") +
+                      "\nПроцедура ДобавленныйМетод()\nКонецПроцедуры\n", encoding="utf-8")
+    changed_timings = {}
+    changed = extract_project(root, module_cache=cache, timings=changed_timings)
+    assert changed_timings["bsl_cache_misses"] == 1
+    assert changed_timings["bsl_cache_hits"] == second_timings["bsl_cache_hits"] - 1
+    assert changed == extract_project(root)
+
+    metadata = root / "Configuration.xml"
+    metadata.write_text(metadata.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    metadata_timings = {}
+    assert extract_project(root, module_cache=cache, timings=metadata_timings) == changed
+    assert metadata_timings["bsl_cache_hits"] == 0
+
+
 def test_record_manager_variable_write_and_reassignment(tmp_path):
     root = tmp_path / "cf"
     shutil.copytree(FIXTURE, root)
@@ -453,6 +484,8 @@ def test_update_rebuilds_onec_graph_and_preserves_extensions(tmp_path):
     )
     assert updated.returncode == 0, updated.stderr
     assert "Updating 1C" in updated.stdout
+    assert "BSL cache:" in updated.stdout
+    assert "parsed" in updated.stdout
     after = json.loads(output.read_text(encoding="utf-8"))
     assert any(node["id"].endswith("/НовыйМетод") for node in after["nodes"])
     assert any(node.get("source_type") == "extension" for node in after["nodes"])

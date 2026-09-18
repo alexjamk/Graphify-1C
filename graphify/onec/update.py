@@ -90,7 +90,7 @@ def is_onec_project(path: Path) -> bool:
     return _is_project_export(base)
 
 
-def update_project(path: Path) -> None:
+def update_project(path: Path, *, force: bool = False) -> None:
     """Rebuild the 1C graph with the same selection and outputs as `analyze`."""
     from graphify.onec.cli import main
 
@@ -107,7 +107,8 @@ def update_project(path: Path) -> None:
         out = Path("graphify-out/graph.json").resolve()
         html = Path("graphify-out/graph.html").resolve()
     if (
-        manifest
+        not force
+        and manifest
         and manifest.get("source_fingerprint")
         and manifest["source_fingerprint"] == _source_fingerprint(root, extensions)
         and out.is_file()
@@ -127,6 +128,8 @@ def update_project(path: Path) -> None:
     args.extend(("--out", str(temporary_json)))
     if temporary_html:
         args.extend(("--html", str(temporary_html)))
+    if force:
+        args.append("--no-cache")
     print("Updating 1C metadata and BSL graph (full rebuild)...")
     try:
         main(args, record_manifest=False)

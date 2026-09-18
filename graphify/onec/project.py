@@ -16,6 +16,7 @@ from tree_sitter import Parser
 import tree_sitter_bsl
 
 from .resolver import CombinedSymbols, Symbols, resolve_call
+from .module_cache import ModuleCache
 from .metadata_types import (
     TYPE_DIRS,
     MANAGERS,
@@ -461,7 +462,9 @@ def _edt_form_contents(
             edges.append(_edge(item_id, target, "uses_command", rel))
 
 
-def _extract_single(root: Path, timings: dict[str, float] | None = None) -> dict:
+def _extract_single(
+    root: Path, timings: dict[str, float] | None = None, module_cache: Path | None = None
+) -> dict:
     """Extract a Configurator XML export or EDT source tree."""
     root = Path(root).resolve()
     phase_started = perf_counter()
@@ -733,6 +736,7 @@ def _extract_single(root: Path, timings: dict[str, float] | None = None) -> dict
     globals_by_name: dict[str, list[str]] = {}
     pending: list[tuple[str, str, str, str]] = []
     module_nodes = {node["id"]: node for node in nodes if node["kind"] == "Module"}
+    cache = ModuleCache(module_cache, root) if module_cache else None
     for bsl, module_id, owner_id in modules:
         rel = bsl.relative_to(root).as_posix()
         data = bsl.read_bytes()
@@ -748,6 +752,33 @@ def _extract_single(root: Path, timings: dict[str, float] | None = None) -> dict
         except UnicodeDecodeError:
             module_nodes[module_id]["parse_status"] = "invalid_utf8_skipped"
             continue
+        can_cache = cache is not None and len(data) >= 4096
+        if cache is not None and not can_cache:
+            cache.misses += 1
+        cached = cache.get(bsl, data) if can_cache else None
+        if cached is not None:
+            module_nodes[module_id].update(cached.get("module_attributes", {}))
+            nodes.extend(cached["nodes"])
+            edges.extend(cached["edges"])
+            pending.extend(tuple(row) for row in cached["pending"])
+            unresolved_movements.extend(tuple(row) for row in cached["unresolved_movements"])
+            for method in cached["nodes"]:
+                if method["kind"] not in {"Procedure", "Function"}:
+                    continue
+                method_id = method["id"]
+                name = method["name"]
+                methods[(module_id.casefold(), name.casefold())] = method_id
+                method_contexts[method_id] = method["execution_context"]
+                method_owners[method_id] = owner_id
+                if method["export"]:
+                    exported_methods.add(method_id)
+                    if owner_id in global_modules:
+                        globals_by_name.setdefault(name.casefold(), []).append(method_id)
+            continue
+        start_nodes = len(nodes)
+        start_edges = len(edges)
+        start_pending = len(pending)
+        start_movements = len(unresolved_movements)
         parsed = Parser(_BSL_LANGUAGE).parse(data).root_node
         if parsed.has_error:
             module_nodes[module_id]["parse_status"] = "partial"
@@ -966,6 +997,23 @@ def _extract_single(root: Path, timings: dict[str, float] | None = None) -> dict
                     if resolved:
                         edges.append(_edge(method_id, resolved[0], "references", rel))
 
+        if can_cache:
+            cache.put(bsl, data, {
+                "module_attributes": {
+                    key: value for key, value in module_nodes[module_id].items()
+                    if key == "parse_status"
+                },
+                "nodes": nodes[start_nodes:],
+                "edges": edges[start_edges:],
+                "pending": pending[start_pending:],
+                "unresolved_movements": unresolved_movements[start_movements:],
+            })
+
+    if cache:
+        cache.close()
+        if timings is not None:
+            timings["bsl_cache_hits"] = timings.get("bsl_cache_hits", 0) + cache.hits
+            timings["bsl_cache_misses"] = timings.get("bsl_cache_misses", 0) + cache.misses
     if timings is not None:
         timings["bsl"] = timings.get("bsl", 0.0) + perf_counter() - phase_started
     phase_started = perf_counter()
@@ -1087,13 +1135,14 @@ def extract_project(
     *,
     extensions: list[Path] | None = None,
     timings: dict[str, float] | None = None,
+    module_cache: Path | None = None,
 ) -> dict:
     """Build one graph from a base export and every discovered extension."""
     base_root, discovered = _project_layout(root)
     extension_roots = list(
         dict.fromkeys([*discovered, *(Path(p).resolve() for p in extensions or [])])
     )
-    base = _extract_single(base_root, timings)
+    base = _extract_single(base_root, timings, module_cache)
     unresolved_names = [call for _, _, call, _ in base.pop("_unresolved_calls", [])]
     base.pop("_unresolved_movements", None)
     for node in base["nodes"]:
@@ -1113,7 +1162,7 @@ def extract_project(
     pending_movements: list[tuple[str, str, str, str]] = []
     namespaces: set[str] = set()
     for extension_root in extension_roots:
-        extracted = _extract_single(extension_root, timings)
+        extracted = _extract_single(extension_root, timings, module_cache)
         unresolved_calls = extracted.pop("_unresolved_calls", [])
         unresolved_movements = extracted.pop("_unresolved_movements", [])
         config = next(node for node in extracted["nodes"] if node["kind"] == "Configuration")

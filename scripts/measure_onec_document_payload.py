@@ -10,7 +10,7 @@ from pathlib import Path
 
 import tiktoken
 
-from benchmark_onec_documents import CASH, ORDER, EXTENSIONS
+from scripts.benchmark_onec_documents import CASH, ORDER
 
 
 def search(pattern: str, paths: list[Path], *options: str) -> str:
@@ -38,12 +38,12 @@ def module(src: Path, doc: str) -> Path:
     return src / "cf" / "Documents" / doc / "Ext" / "ObjectModule.bsl"
 
 
-def extension_paths(src: Path, doc: str, metadata: bool) -> list[Path]:
+def extension_paths(src: Path, doc: str, metadata: bool, extensions: list[str]) -> list[Path]:
     suffix = f"{doc}.xml" if metadata else doc
-    return [src / "cfe" / name / "Documents" / suffix for name in EXTENSIONS]
+    return [src / "cfe" / name / "Documents" / suffix for name in extensions]
 
 
-def cases(src: Path, db: sqlite3.Connection) -> list[tuple[int, str, str]]:
+def cases(src: Path, db: sqlite3.Connection, extensions: list[str]) -> list[tuple[int, str, str]]:
     result = []
     for number, doc in ((1, CASH), (2, ORDER)):
         graph = rows(
@@ -54,7 +54,7 @@ def cases(src: Path, db: sqlite3.Connection) -> list[tuple[int, str, str]]:
         )
         source = search(
             "<ObjectBelonging>Adopted</ObjectBelonging>",
-            extension_paths(src, doc, True),
+            extension_paths(src, doc, True, extensions),
             "-l",
             "-F",
         )
@@ -69,7 +69,7 @@ def cases(src: Path, db: sqlite3.Connection) -> list[tuple[int, str, str]]:
         )
         source = search(
             r"^\s*&(Перед|После|Вместо|ИзменениеИКонтроль)\(",
-            extension_paths(src, doc, False),
+            extension_paths(src, doc, False, extensions),
             "-n",
             "--glob",
             "*.bsl",
@@ -82,7 +82,8 @@ def cases(src: Path, db: sqlite3.Connection) -> list[tuple[int, str, str]]:
             f"1c://Document/{doc}/ObjectModule/ОбработкаПроведения",
         )
         source = search(r"^Процедура ОбработкаПроведения\(", [module(src, doc)], "-n", "-A", "30")
-        source = source.split("КонецПроцедуры", 1)[0] + "КонецПроцедуры"
+        if "КонецПроцедуры" in source:
+            source = source.split("КонецПроцедуры", 1)[0] + "КонецПроцедуры"
         result.append((number, graph, source))
     target = (
         "1c://InformationRegister/СтатусыСборкиИДоставки/ManagerModule/ЗаписатьСтатусИзРаспоряжения"
@@ -132,7 +133,7 @@ def cases(src: Path, db: sqlite3.Connection) -> list[tuple[int, str, str]]:
             [src / "cf" / "Documents" / f"{doc}.xml"],
             "-n",
             "-A",
-            "12",
+            "20",
             "-F",
         )
         result.append((number, graph, source))
@@ -143,10 +144,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--src", required=True, type=Path)
     parser.add_argument("--database", required=True, type=Path)
+    parser.add_argument("--extension", action="append", required=True, dest="extensions")
     args = parser.parse_args()
     encoding = tiktoken.get_encoding("o200k_base")
     with sqlite3.connect(args.database) as db:
-        values = cases(args.src, db)
+        values = cases(args.src, db, args.extensions)
     output = [
         {
             "question": number,
