@@ -436,7 +436,8 @@ def test_init_project_reuses_one_install_for_separate_projects(tmp_path, capsys)
     assert first_rules.count("<!-- graphify-1c:start -->") == 1
     assert "graphify-1c index groups" in first_rules
     assert "graphify-out/.graphify_onec.json" in first_rules
-    assert "не включай их без запроса" in first_rules
+    assert "Пустой `extensions` при `root=src`" in first_rules
+    assert "`analyze ./src` включит все" in first_rules
     assert '"selected"' in manifest.read_text(encoding="utf-8")
     assert (first / "CLAUDE.md").exists()
     assert (first / ".github" / "copilot-instructions.md").exists()
