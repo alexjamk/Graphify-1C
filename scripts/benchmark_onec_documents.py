@@ -1,4 +1,4 @@
-"""Time the ten documented конфигурация «Управление торговлей» 11.5.27.52 questions using a graph or source search."""
+"""Time ten documented questions using a graph or source search."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from time import perf_counter
 
 CASH = "ПоступлениеБезналичныхДенежныхСредств"
 ORDER = "ЗаказКлиента"
-EXTENSIONS = ("Расширение 1", "Расширение 2")
 HOOKS = {
     "Перед": "BEFORE",
     "После": "AFTER",
@@ -56,8 +55,8 @@ def graph_extensions(database: Path, document: str) -> set[str]:
     return {row[0] for row in rows}
 
 
-def source_extensions(src: Path, document: str) -> set[str]:
-    paths = [src / "cfe" / extension / "Documents" / f"{document}.xml" for extension in EXTENSIONS]
+def source_extensions(src: Path, document: str, extensions: list[str]) -> set[str]:
+    paths = [src / "cfe" / extension / "Documents" / f"{document}.xml" for extension in extensions]
     lines = rg("<ObjectBelonging>Adopted</ObjectBelonging>", paths, "-l", "-F")
     return {Path(line).parent.parent.name for line in lines}
 
@@ -72,8 +71,8 @@ def graph_hooks(database: Path, document: str) -> set[tuple[str, str]]:
     return {(relation, target.rsplit("/", 1)[-1]) for relation, target in rows}
 
 
-def source_hooks(src: Path, document: str) -> set[tuple[str, str]]:
-    paths = [src / "cfe" / extension / "Documents" / document for extension in EXTENSIONS]
+def source_hooks(src: Path, document: str, extensions: list[str]) -> set[tuple[str, str]]:
+    paths = [src / "cfe" / extension / "Documents" / document for extension in extensions]
     lines = rg(r"^\s*&(Перед|После|Вместо|ИзменениеИКонтроль)\(", paths, "-n", "--glob", "*.bsl")
     return {
         (HOOKS[match["kind"]], match["target"]) for line in lines if (match := HOOK.search(line))
@@ -179,6 +178,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--src", type=Path, required=True)
     parser.add_argument("--database", type=Path, required=True)
+    parser.add_argument("--extension", action="append", required=True, dest="extensions")
     parser.add_argument("--repeats", type=int, default=7)
     args = parser.parse_args()
     if args.repeats < 1:
@@ -187,15 +187,23 @@ def main() -> None:
         (
             1,
             lambda: graph_extensions(args.database, CASH),
-            lambda: source_extensions(args.src, CASH),
+            lambda: source_extensions(args.src, CASH, args.extensions),
         ),
         (
             2,
             lambda: graph_extensions(args.database, ORDER),
-            lambda: source_extensions(args.src, ORDER),
+            lambda: source_extensions(args.src, ORDER, args.extensions),
         ),
-        (3, lambda: graph_hooks(args.database, CASH), lambda: source_hooks(args.src, CASH)),
-        (4, lambda: graph_hooks(args.database, ORDER), lambda: source_hooks(args.src, ORDER)),
+        (
+            3,
+            lambda: graph_hooks(args.database, CASH),
+            lambda: source_hooks(args.src, CASH, args.extensions),
+        ),
+        (
+            4,
+            lambda: graph_hooks(args.database, ORDER),
+            lambda: source_hooks(args.src, ORDER, args.extensions),
+        ),
         (5, lambda: graph_calls(args.database, CASH), lambda: source_calls(args.src, CASH)),
         (6, lambda: graph_calls(args.database, ORDER), lambda: source_calls(args.src, ORDER)),
         (7, lambda: graph_manager_target(args.database), lambda: source_manager_target(args.src)),

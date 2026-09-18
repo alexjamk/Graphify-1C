@@ -25,5 +25,6 @@
 
 ```powershell
 $env:PYTHONIOENCODING = 'utf-8'
-python scripts/benchmark_onec_documents.py --src './src' --database graphify-out/ut-11-5-27-52.sqlite
+python scripts/benchmark_onec_documents.py --src './src' --database graphify-out/ut-11-5-27-52.sqlite `
+  --extension 'Расширение 1' --extension 'Расширение 2'
 ```
