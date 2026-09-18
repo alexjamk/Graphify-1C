@@ -119,7 +119,12 @@ def main(argv: list[str] | None = None) -> None:
         parser.error(str(exc))
     for path, status in changed:
         print(f"{status}: {path}")
-    print("Next: graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html")
+    if (args.root.resolve() / "graphify-out" / ".graphify_onec.json").is_file():
+        print("Next: use the index recorded in graphify-out/.graphify_onec.json; "
+              "if it is missing, run graphify-1c update .")
+    else:
+        print("Next: graphify-1c analyze ./src --out graphify-out/graph.json "
+              "--html graphify-out/graph.html")
 
 
 if __name__ == "__main__":

@@ -387,8 +387,8 @@ def test_streamed_large_graph_builds_disk_index(tmp_path):
     assert query.returncode == 0, query.stderr
 
 
-def test_init_project_reuses_one_install_for_separate_projects(tmp_path):
-    from graphify.onec.init_project import init_project
+def test_init_project_reuses_one_install_for_separate_projects(tmp_path, capsys):
+    from graphify.onec.init_project import init_project, main as init_main
 
     first = tmp_path / "first"
     second = tmp_path / "second"
@@ -415,6 +415,8 @@ def test_init_project_reuses_one_install_for_separate_projects(tmp_path):
     init_project(first, ["codex", "claude", "vscode"])
     assert (first / "AGENTS.md").read_text(encoding="utf-8") == first_rules
     assert (first / ".gitignore").read_text(encoding="utf-8").count("graphify-out/") == 1
+    init_main([str(first), "--agents", "codex"])
+    assert "index recorded" in capsys.readouterr().out
 
 
 def test_update_rebuilds_onec_graph_and_preserves_extensions(tmp_path):
