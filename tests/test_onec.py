@@ -12,7 +12,10 @@ from graphify.export import to_json
 from graphify.onec import extract_project
 from graphify.onec.graph import build_onec_graph
 from graphify.onec.export import write_onec_json
-from graphify.onec.index import build_index, neighbors, search, shortest_path, explain
+from graphify.onec.index import (
+    _print_agent_result, build_index, explain, main as index_main,
+    neighbors, search, shortest_path, export_neighbors,
+)
 from graphify.onec.viewer import write_onec_html
 from graphify.onec.update import _manifest_for, remember_analysis
 from graphify.validate import validate_extraction
@@ -285,11 +288,53 @@ def test_disk_index_queries_graph_without_loading_json(tmp_path):
     assert links[0]["source_extension"] == "Тест"
     assert links[0]["target_type"] == "configuration"
     assert neighbors(database, "1c://Document/Заказ", direction="in", offset=1) == []
+    with pytest.raises(ValueError, match="1..30"):
+        neighbors(database, "1c://Document/Заказ", limit=1000000)
+    with pytest.raises(ValueError, match="1..30"):
+        search(database, "Заказ", limit=1000000)
+    with pytest.raises(ValueError, match="must not be empty"):
+        search(database, " ")
     broken = tmp_path / "broken.json"
     broken.write_text('{"nodes": [], "links": []}\n', encoding="utf-8")
     with pytest.raises(ValueError):
         build_index(broken, database)
     assert len(search(database, "Заказ")) == 2
+
+
+def test_agent_index_output_is_small_and_large_json_cannot_be_loaded(tmp_path, capsys, monkeypatch):
+    from graphify import security
+
+    graph = tmp_path / "graph.json"
+    graph.write_text(
+        json.dumps({"nodes": [{"id": "1c://Document/Тест", "label": "Тест"}],
+                    "links": [{"source": "1c://Document/Тест", "target": "1c://Document/Тест",
+                               "relation": "references"}]}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    database = tmp_path / "graph.sqlite"
+    build_index(graph, database)
+    index_main(["neighbors", str(database), "1c://Document/Тест"])
+    payload = capsys.readouterr().out
+    assert len(payload.encode("utf-8")) < 12 * 1024
+    assert "neighbor_label" in payload and "source_label" not in payload
+    export_path = tmp_path / "all-uses.jsonl"
+    result = export_neighbors(database, "1c://Document/Тест", export_path,
+                              relation="references")
+    assert result["count"] == 1
+    assert json.loads(export_path.read_text(encoding="utf-8"))["neighbor_kind"] is None
+    index_main(["groups", str(database), "1c://Document/Тест", "--direction", "in"])
+    assert '"count": 1' in capsys.readouterr().out
+    with pytest.raises(SystemExit) as exc:
+        index_main(["search", str(database), "Тест", "--limit", "1000000"])
+    assert exc.value.code == 2
+    assert capsys.readouterr().out == ""
+    with pytest.raises(ValueError, match="12 KiB"):
+        _print_agent_result({"oversized": "x" * 15000})
+    assert capsys.readouterr().out == ""
+    monkeypatch.setattr(security, "_MAX_ONEC_JSON_BYTES", graph.stat().st_size - 1)
+    monkeypatch.setenv("GRAPHIFY_MAX_GRAPH_BYTES", "2GB")
+    with pytest.raises(ValueError, match="loading it into memory is disabled"):
+        security.check_graph_file_size_cap(graph)
 
 
 def test_streamed_large_graph_builds_disk_index(tmp_path):
@@ -360,6 +405,14 @@ def test_update_rebuilds_onec_graph_and_preserves_extensions(tmp_path):
     assert (project / "graphify-out" / ".graphify_onec.json").exists()
     before = json.loads(output.read_text(encoding="utf-8"))
     assert any(node.get("source_type") == "extension" for node in before["nodes"])
+    initial_bytes = output.read_bytes()
+    unchanged = subprocess.run(
+        [sys.executable, "-m", "graphify", "update", "."],
+        cwd=project, capture_output=True, text=True, env=env,
+    )
+    assert unchanged.returncode == 0, unchanged.stderr
+    assert "sources unchanged" in unchanged.stdout
+    assert output.read_bytes() == initial_bytes
     module = cf / "Documents" / "ЗаказКлиента" / "Ext" / "ObjectModule.bsl"
     module.write_text(module.read_text(encoding="utf-8") + "\nПроцедура НовыйМетод()\nКонецПроцедуры\n", encoding="utf-8")
     updated = subprocess.run(

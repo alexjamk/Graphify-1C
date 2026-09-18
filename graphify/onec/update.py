@@ -4,12 +4,37 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 from pathlib import Path
 from uuid import uuid4
 
 from graphify.onec.project import _is_project_export, _project_layout
 
 _MARKER = ".graphify_onec.json"
+_SOURCE_SUFFIXES = {".xml", ".mdo", ".form", ".bsl"}
+
+
+def _source_fingerprint(root: Path, extensions: list[Path]) -> str:
+    """Fingerprint source names, sizes and modification times without reading exports."""
+    base, discovered = _project_layout(root)
+    sources = list(dict.fromkeys([base, *discovered, *(p.resolve() for p in extensions)]))
+    digest = hashlib.sha256()
+    for source in sources:
+        digest.update(str(source.resolve()).encode("utf-8"))
+        digest.update(b"\0")
+        if not source.is_dir():
+            digest.update(b"missing\0")
+            continue
+        for directory, folders, files in os.walk(source):
+            folders.sort()
+            for name in sorted(files):
+                if Path(name).suffix.casefold() not in _SOURCE_SUFFIXES:
+                    continue
+                file = Path(directory) / name
+                stat = file.stat()
+                digest.update(str(file.relative_to(source)).encode("utf-8"))
+                digest.update(f"\0{stat.st_size}\0{stat.st_mtime_ns}\0".encode())
+    return digest.hexdigest()
 
 
 def remember_analysis(
@@ -30,6 +55,8 @@ def remember_analysis(
         "extensions": [str(path.resolve()) for path in extensions],
         "out": str(out.resolve()),
         "html": str(html.resolve()) if html else None,
+        "source_fingerprint": _source_fingerprint(source_root, extensions),
+        "has_sqlite": bool(html and html.with_suffix(".sqlite").is_file()),
     }
     destinations = {project_root / "graphify-out", out.resolve().parent}
     for directory in destinations:
@@ -79,6 +106,16 @@ def update_project(path: Path) -> None:
         extensions = []
         out = Path("graphify-out/graph.json").resolve()
         html = Path("graphify-out/graph.html").resolve()
+    if (
+        manifest
+        and manifest.get("source_fingerprint")
+        and manifest["source_fingerprint"] == _source_fingerprint(root, extensions)
+        and out.is_file()
+        and (html is None or html.is_file())
+        and (not manifest.get("has_sqlite") or (html is not None and html.with_suffix(".sqlite").is_file()))
+    ):
+        print("1C sources unchanged; graph is current.")
+        return
     token = uuid4().hex
     temporary_json = out.with_name(f".{out.stem}.{token}.tmp{out.suffix}")
     temporary_html = (

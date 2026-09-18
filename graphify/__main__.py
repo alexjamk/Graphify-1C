@@ -537,7 +537,7 @@ def _run_cli() -> None:
         print("Commands:")
         print("  analyze <root>          analyze a 1C src/cf + src/cfe project as one graph")
         print("  onec <root>             build a graph from a 1C Configurator or EDT export")
-        print("  index <action>          build/search/neighbors in the 1C SQLite index")
+        print("  index <action>          build/search/neighbors/groups/export/explain/path in the 1C SQLite index")
         print("  serve <html>            open the large 1C graph viewer on localhost")
         print("    --out <path>           output graph JSON (default graphify-out/graph.json)")
         print("    --extension <root>      include a 1C extension export (repeatable)")

@@ -16,7 +16,7 @@ graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/grap
 graphify-1c index build graphify-out/graph.json graphify-out/graph.sqlite
 ```
 
-После изменений исходников выполните `graphify-1c update .`. Эта команда сохраняет выбранные расширения и пути результатов последнего анализа, затем полностью перестраивает граф 1С. Инкрементальная обработка только изменённых файлов пока не реализована. Храните `graphify-out/` локально и исключите его из Git, если не приняли отдельного решения о публикации данных.
+После изменений исходников выполните `graphify-1c update .`. Команда сохраняет выбранные расширения и пути результатов последнего анализа, быстро завершается при неизменных исходниках, а после изменения полностью перестраивает граф 1С. Инкрементальная обработка отдельных изменённых файлов пока не реализована. Храните `graphify-out/` локально и исключите его из Git, если не приняли отдельного решения о публикации данных.
 
 ## Модель графа
 
@@ -41,11 +41,11 @@ graphify-1c index build graphify-out/graph.json graphify-out/graph.sqlite
 3. **Пройти все страницы при запросе «все места».** Например:
 
    ```powershell
-   graphify-1c index neighbors graphify-out/graph.sqlite '<точный ID>' --direction in --relation calls --limit 100 --offset 0
-   graphify-1c index neighbors graphify-out/graph.sqlite '<точный ID>' --direction in --relation calls --limit 100 --offset 100
+   graphify-1c index neighbors graphify-out/graph.sqlite '<точный ID>' --direction in --relation calls --limit 10 --offset 0
+   graphify-1c index neighbors graphify-out/graph.sqlite '<точный ID>' --direction in --relation calls --limit 10 --offset 10
    ```
 
-   Продолжайте с шагом 100 до пустого ответа. Повторите для других отношений, которые соответствуют вопросу. Первые 100 связей нельзя выдавать за все связи.
+   Продолжайте с шагом 10 до пустого ответа. Повторите для других отношений, которые соответствуют вопросу. Первые 10 связей нельзя выдавать за все связи. Сначала узнайте полное количество через `graphify-1c index groups graphify-out/graph.sqlite '<точный ID>' --direction in`. Если совпадений тысячи, запишите их командой `graphify-1c index export graphify-out/graph.sqlite '<точный ID>' graphify-out/usages.jsonl --direction in --relation calls`; она выдаст в терминал только количество и путь. Не печатайте весь JSONL в контекст агента.
 4. **Расширить только нужную ветвь.** Для найденного метода спросите входящую `contains`, чтобы увидеть модуль; для модуля повторите запрос и найдите объект метаданных. Для объекта просмотрите входящую `EXTENDS`, а для метода — четыре вида перехватов.
    `graphify-1c index explain graphify-out/graph.sqlite '<точный ID>'` выдаёт карточку узла, количество связей по типам и ограниченный образец. `graphify-1c index path graphify-out/graph.sqlite '<ID начала>' '<ID конца>'` ищет направленный путь по дисковому индексу с ограничением глубины и числа посещённых узлов; `truncated=true` означает, что предел обхода достигнут.
 5. **Проверить исходники.** Откройте указанные XML/BSL-файлы и строки. Если строка не сохранена, откройте небольшой участок по имени узла. Сопоставьте результат графа с исходником перед правкой или утверждением о поведении.

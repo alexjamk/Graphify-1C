@@ -670,6 +670,25 @@ def _enforce_graph_size_cap_or_exit(gp: Path) -> None:
     try:
         check_graph_file_size_cap(gp)
     except ValueError as exc:
+        sqlite_index = gp.with_suffix(".sqlite")
+        try:
+            if sqlite_index.is_file():
+                is_onec = True
+            else:
+                with gp.open("rb") as stream:
+                    is_onec = b"1c://" in stream.read(65536)
+        except OSError:
+            is_onec = False
+        if is_onec:
+            print(
+                "error: 1C graph exceeds the safe JSON loading limit. "
+                f"Use 'graphify-1c index search {sqlite_index} <term>' and "
+                "index neighbors/explain/path for bounded answers. "
+                + ("" if sqlite_index.is_file() else
+                   f"First build it with 'graphify-1c index build {gp} {sqlite_index}'."),
+                file=sys.stderr,
+            )
+            sys.exit(1)
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(1)
 def _hook_strict_enabled(flag: bool) -> bool:

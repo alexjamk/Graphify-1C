@@ -30,6 +30,7 @@ _MAX_TEXT_BYTES  = 10_485_760   # 10 MB hard cap for HTML / text
 # working; the effective cap is resolved at call time by
 # ``_max_graph_file_bytes`` (which lets ``GRAPHIFY_MAX_GRAPH_BYTES`` override it).
 _MAX_GRAPH_FILE_BYTES = 512 * 1024 * 1024   # 512 MiB
+_MAX_ONEC_JSON_BYTES = 256 * 1024 * 1024
 
 
 def _max_graph_file_bytes() -> int:
@@ -375,6 +376,19 @@ def check_graph_file_size_cap(path: Path) -> None:
         size = path.stat().st_size
     except OSError:
         return
+    if size > _MAX_ONEC_JSON_BYTES:
+        try:
+            with path.open("rb") as stream:
+                is_onec = b"1c://" in stream.read(65536)
+        except OSError:
+            is_onec = False
+        if is_onec:
+            raise ValueError(
+                "large 1C graph.json must be queried through graph.sqlite "
+                "(graphify-1c index search/neighbors/explain/path); "
+                "loading it into memory is disabled even when "
+                "GRAPHIFY_MAX_GRAPH_BYTES is raised"
+            )
     if size > cap:
         raise ValueError(
             f"graph file {path} is {size:_d} bytes, exceeds {cap:_d}-byte cap\n"

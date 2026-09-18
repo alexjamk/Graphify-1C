@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sqlite3
+import sys
 from collections import deque
 from contextlib import closing
 from pathlib import Path
@@ -15,6 +16,8 @@ from uuid import uuid4
 
 NODE_FIELDS = {"id", "label", "kind", "source_file", "start_line", "source_type", "extension_name"}
 EDGE_FIELDS = {"source", "target", "relation", "confidence"}
+MAX_PAGE_SIZE = 30
+MAX_AGENT_OUTPUT_BYTES = 12 * 1024
 
 
 def _records(path: Path):
@@ -159,11 +162,17 @@ def build_index(graph_path: Path, db_path: Path) -> dict[str, int | float]:
 
 
 def search(db_path: Path, term: str, limit: int = 20, offset: int = 0) -> list[dict]:
-    if limit < 1 or offset < 0:
-        raise ValueError("limit must be positive and offset non-negative")
+    if not 1 <= limit <= MAX_PAGE_SIZE or offset < 0:
+        raise ValueError(f"limit must be 1..{MAX_PAGE_SIZE} and offset non-negative")
+    term = term.strip()
+    if not term:
+        raise ValueError("search term must not be empty")
+    if len(term) > 200:
+        raise ValueError("search term must be at most 200 characters")
     with closing(sqlite3.connect(db_path)) as db:
         db.row_factory = sqlite3.Row
         normalized = term.casefold()
+        escaped = normalized.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         has_fts = db.execute(
             "SELECT 1 FROM sqlite_master WHERE name='nodes_fts'"
         ).fetchone() is not None
@@ -177,8 +186,9 @@ def search(db_path: Path, term: str, limit: int = 20, offset: int = 0) -> list[d
         else:
             rows = db.execute(
                 "SELECT id,label,kind,source_file,start_line,source_type,extension_name "
-                "FROM nodes WHERE norm_label LIKE ? OR norm_id LIKE ? ORDER BY id LIMIT ? OFFSET ?",
-                (f"%{normalized}%", f"%{normalized}%", limit, offset),
+                "FROM nodes WHERE norm_label LIKE ? ESCAPE '\\' "
+                "OR norm_id LIKE ? ESCAPE '\\' ORDER BY id LIMIT ? OFFSET ?",
+                (f"%{escaped}%", f"%{escaped}%", limit, offset),
             )
         return [dict(row) for row in rows]
 
@@ -189,13 +199,13 @@ def neighbors(
     *,
     direction: str = "both",
     relation: str | None = None,
-    limit: int = 100,
+    limit: int = 10,
     offset: int = 0,
 ) -> list[dict]:
     if direction not in {"in", "out", "both"}:
         raise ValueError("direction must be in, out, or both")
-    if limit < 1 or offset < 0:
-        raise ValueError("limit must be positive and offset non-negative")
+    if not 1 <= limit <= MAX_PAGE_SIZE or offset < 0:
+        raise ValueError(f"limit must be 1..{MAX_PAGE_SIZE} and offset non-negative")
     clauses = []
     parameters: list[str | int] = []
     if direction in {"out", "both"}:
@@ -271,12 +281,12 @@ def shortest_path(
         return {"found": True, "truncated": False, "visited": len(previous), "path": route}
 
 
-def explain(db_path: Path, node_id: str, *, sample: int = 20) -> dict:
+def explain(db_path: Path, node_id: str, *, sample: int = 10) -> dict:
     """Return bounded node context from SQLite for an agent."""
     from graphify.onec.serve import neighbor_groups
 
-    if sample < 0:
-        raise ValueError("sample must be non-negative")
+    if not 0 <= sample <= 20:
+        raise ValueError("sample must be 0..20")
     with closing(sqlite3.connect(db_path)) as db:
         db.row_factory = sqlite3.Row
         row = db.execute(
@@ -291,6 +301,77 @@ def explain(db_path: Path, node_id: str, *, sample: int = 20) -> dict:
         "groups": neighbor_groups(db_path, node_id),
         "sample": neighbors(db_path, node_id, limit=sample) if sample else [],
     }
+
+
+def _print_agent_result(result: object) -> None:
+    """Keep an accidental broad query out of an agent's context window."""
+    output = json.dumps(result, ensure_ascii=False, indent=2)
+    if len(output.encode("utf-8")) > MAX_AGENT_OUTPUT_BYTES:
+        raise ValueError(
+            "result exceeds 12 KiB; narrow the search or use a smaller --limit "
+            "and advance with --offset"
+        )
+    print(output)
+
+
+def _compact_neighbors(rows: list[dict], node_id: str) -> list[dict]:
+    """Emit one neighbor's provenance without repeating both endpoints' details."""
+    result = []
+    for row in rows:
+        side = "target" if row["source"] == node_id else "source"
+        result.append({
+            "source": row["source"], "target": row["target"],
+            "relation": row["relation"], "confidence": row["confidence"],
+            "neighbor_label": row[f"{side}_label"],
+            "neighbor_kind": row[f"{side}_kind"],
+            "neighbor_source_type": row[f"{side}_type"],
+            "neighbor_extension": row[f"{side}_extension"],
+            "neighbor_file": row[f"{side}_file"],
+            "neighbor_line": row[f"{side}_line"],
+        })
+    return result
+
+
+def export_neighbors(
+    db_path: Path, node_id: str, output: Path, *,
+    direction: str = "in", relation: str | None = None,
+) -> dict:
+    """Write every matching use to JSONL on disk without filling agent output."""
+    if direction not in {"in", "out"}:
+        raise ValueError("direction must be in or out")
+    column, other = ("target", "source") if direction == "in" else ("source", "target")
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name(f".{output.name}.{uuid4().hex}.tmp")
+    count = 0
+    try:
+        with closing(sqlite3.connect(db_path)) as db:
+            db.row_factory = sqlite3.Row
+            if db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,)).fetchone() is None:
+                raise KeyError(node_id)
+            sql = (
+                "SELECT e.source,e.target,e.relation,e.confidence,"
+                "n.label AS neighbor_label,n.kind AS neighbor_kind,"
+                "n.source_type AS neighbor_source_type,"
+                "n.extension_name AS neighbor_extension,"
+                "n.source_file AS neighbor_file,n.start_line AS neighbor_line "
+                f"FROM edges e LEFT JOIN nodes n ON n.id=e.{other} "
+                f"WHERE e.{column}=?"
+            )
+            parameters = [node_id]
+            if relation:
+                sql += " AND e.relation=?"
+                parameters.append(relation)
+            sql += " ORDER BY e.rowid"
+            with temporary.open("w", encoding="utf-8", newline="\n") as stream:
+                for row in db.execute(sql, parameters):
+                    stream.write(json.dumps(dict(row), ensure_ascii=False) + "\n")
+                    count += 1
+        size = temporary.stat().st_size
+        os.replace(temporary, output)
+        return {"count": count, "bytes": size, "output": str(output.resolve())}
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -309,7 +390,7 @@ def main(argv: list[str] | None = None) -> None:
     adjacent.add_argument("node_id")
     adjacent.add_argument("--direction", choices=("in", "out", "both"), default="both")
     adjacent.add_argument("--relation")
-    adjacent.add_argument("--limit", type=int, default=100)
+    adjacent.add_argument("--limit", type=int, default=10)
     adjacent.add_argument("--offset", type=int, default=0)
     route = sub.add_parser("path")
     route.add_argument("database", type=Path)
@@ -320,46 +401,52 @@ def main(argv: list[str] | None = None) -> None:
     summary = sub.add_parser("explain")
     summary.add_argument("database", type=Path)
     summary.add_argument("node_id")
-    summary.add_argument("--sample", type=int, default=20)
+    summary.add_argument("--sample", type=int, default=10)
+    groups = sub.add_parser("groups", help="count relationships before paging through them")
+    groups.add_argument("database", type=Path)
+    groups.add_argument("node_id")
+    groups.add_argument("--direction", choices=("in", "out", "both"), default="both")
+    groups.add_argument("--relation")
+    export = sub.add_parser("export", help="stream all matching links to JSONL without printing them")
+    export.add_argument("database", type=Path)
+    export.add_argument("node_id")
+    export.add_argument("output", type=Path)
+    export.add_argument("--direction", choices=("in", "out"), default="in")
+    export.add_argument("--relation")
     args = parser.parse_args(argv)
-    if args.command == "build":
-        print(json.dumps(build_index(args.graph, args.database), ensure_ascii=False))
-    elif args.command == "search":
-        print(
-            json.dumps(
-                search(args.database, args.term, limit=args.limit, offset=args.offset),
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
-    elif args.command == "path":
-        print(
-            json.dumps(
-                shortest_path(
-                    args.database, args.source, args.target,
-                    max_hops=args.max_hops, max_visited=args.max_visited,
-                ),
-                ensure_ascii=False, indent=2,
-            )
-        )
-    elif args.command == "explain":
-        print(json.dumps(explain(args.database, args.node_id, sample=args.sample),
-                         ensure_ascii=False, indent=2))
-    else:
-        print(
-            json.dumps(
-                neighbors(
-                    args.database,
-                    args.node_id,
-                    direction=args.direction,
-                    relation=args.relation,
-                    limit=args.limit,
-                    offset=args.offset,
-                ),
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
+    try:
+        if args.command == "build":
+            _print_agent_result(build_index(args.graph, args.database))
+        elif args.command == "search":
+            _print_agent_result(search(args.database, args.term, limit=args.limit, offset=args.offset))
+        elif args.command == "path":
+            _print_agent_result(shortest_path(
+                args.database, args.source, args.target,
+                max_hops=args.max_hops, max_visited=args.max_visited,
+            ))
+        elif args.command == "explain":
+            _print_agent_result(explain(args.database, args.node_id, sample=args.sample))
+        elif args.command == "groups":
+            from graphify.onec.serve import neighbor_groups
+
+            _print_agent_result(neighbor_groups(
+                args.database, args.node_id,
+                direction=args.direction, relation=args.relation,
+            ))
+        elif args.command == "export":
+            _print_agent_result(export_neighbors(
+                args.database, args.node_id, args.output,
+                direction=args.direction, relation=args.relation,
+            ))
+        else:
+            _print_agent_result(_compact_neighbors(neighbors(
+                args.database, args.node_id,
+                direction=args.direction, relation=args.relation,
+                limit=args.limit, offset=args.offset,
+            ), args.node_id))
+    except (ValueError, KeyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
 
 if __name__ == "__main__":
