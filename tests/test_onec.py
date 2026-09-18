@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -278,6 +279,55 @@ def test_disk_index_queries_graph_without_loading_json(tmp_path):
     assert links[0]["source_extension"] == "Тест"
     assert links[0]["target_type"] == "configuration"
     assert neighbors(database, "1c://Document/Заказ", direction="in", offset=1) == []
+
+
+def test_update_rebuilds_onec_graph_and_preserves_extensions(tmp_path):
+    project = tmp_path / "project"
+    cf = project / "src" / "cf"
+    extension = project / "selected" / "Extension1"
+    shutil.copytree(FIXTURE, cf)
+    shutil.copytree(EXTENSION, extension)
+    output = project / "reports" / "custom.json"
+    html = project / "reports" / "custom.html"
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    analyze = subprocess.run(
+        [sys.executable, "-m", "graphify", "analyze", "./src", "--extension",
+         str(extension), "--out", str(output), "--html", str(html)],
+        cwd=project, capture_output=True, text=True, env=env,
+    )
+    assert analyze.returncode == 0, analyze.stderr
+    assert (project / "graphify-out" / ".graphify_onec.json").exists()
+    before = json.loads(output.read_text(encoding="utf-8"))
+    assert any(node.get("source_type") == "extension" for node in before["nodes"])
+    module = cf / "Documents" / "ЗаказКлиента" / "Ext" / "ObjectModule.bsl"
+    module.write_text(module.read_text(encoding="utf-8") + "\nПроцедура НовыйМетод()\nКонецПроцедуры\n", encoding="utf-8")
+    updated = subprocess.run(
+        [sys.executable, "-m", "graphify", "update", "."],
+        cwd=project, capture_output=True, text=True, env=env,
+    )
+    assert updated.returncode == 0, updated.stderr
+    assert "Updating 1C" in updated.stdout
+    after = json.loads(output.read_text(encoding="utf-8"))
+    assert any(node["id"].endswith("/НовыйМетод") for node in after["nodes"])
+    assert any(node.get("source_type") == "extension" for node in after["nodes"])
+    assert html.exists()
+
+
+def test_update_detects_onec_project_without_previous_analyze(tmp_path):
+    project = tmp_path / "project"
+    shutil.copytree(FIXTURE, project / "src" / "cf")
+    shutil.copytree(EXTENSION, project / "src" / "cfe" / "Extension1")
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    updated = subprocess.run(
+        [sys.executable, "-m", "graphify", "update", "."],
+        cwd=project, capture_output=True, text=True, env=env,
+    )
+    assert updated.returncode == 0, updated.stderr
+    assert "Updating 1C" in updated.stdout
+    assert (project / "graphify-out" / "graph.json").exists()
+    assert (project / "graphify-out" / "graph.html").exists()
+    nodes = json.loads((project / "graphify-out" / "graph.json").read_text(encoding="utf-8"))["nodes"]
+    assert any(node.get("source_type") == "extension" for node in nodes)
 
 
 def test_parallel_onec_relations_survive_graph_build(tmp_path):

@@ -11,6 +11,7 @@ from graphify.export import to_json
 from graphify.onec.graph import build_onec_graph
 from graphify.onec.project import extract_project
 from graphify.onec.viewer import write_onec_html
+from graphify.onec.update import remember_analysis
 from graphify.validate import assert_valid
 
 
@@ -75,3 +76,4 @@ def main(argv: list[str] | None = None) -> None:
             + ", ".join(f"{status}={count}" for status, count in sorted(issues.items())),
             file=sys.stderr,
         )
+    remember_analysis(args.root, args.extension, args.out, args.html)

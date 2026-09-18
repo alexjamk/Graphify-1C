@@ -2436,6 +2436,13 @@ def dispatch_command(cmd: str) -> None:
         if not watch_path.exists():
             print(f"error: path not found: {watch_path}", file=sys.stderr)
             sys.exit(1)
+        from graphify.onec.update import is_onec_project, update_project
+
+        if is_onec_project(watch_path):
+            if no_cluster:
+                print("1C update ignores --no-cluster; the 1C graph uses its own viewer.")
+            update_project(watch_path)
+            return
         from graphify.watch import _rebuild_code
 
         print(f"Re-extracting code files in {watch_path} (no LLM needed)...")
