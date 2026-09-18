@@ -525,12 +525,14 @@ def _run_cli() -> None:
         for skill_dst in {_platform_skill_destination(name) for name in _PLATFORM_CONFIG}:
             _check_skill_version(skill_dst)
 
+    command_name = "graphify-1c" if Path(sys.argv[0]).stem == "graphify-1c" else "graphify"
+
     if len(sys.argv) >= 2 and sys.argv[1] in ("-v", "--version", "version"):
-        print(f"graphify {__version__}")
+        print(f"{command_name} {__version__}")
         return
 
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "-?"):
-        print("Usage: graphify <command>")
+        print(f"Usage: {command_name} <command>")
         print()
         print("Commands:")
         print("  analyze <root>          analyze a 1C src/cf + src/cfe project as one graph")
