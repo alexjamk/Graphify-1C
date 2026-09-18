@@ -537,6 +537,7 @@ def _run_cli() -> None:
         print("Commands:")
         print("  analyze <root>          analyze a 1C src/cf + src/cfe project as one graph")
         print("  onec <root>             build a graph from a 1C Configurator or EDT export")
+        print("  init-project [root]     add project-local 1C agent instructions (Codex, Claude, VS Code)")
         print("  index <action>          build/search/neighbors/groups/export/explain/path in the 1C SQLite index")
         print("  serve <html>            open the large 1C graph viewer on localhost")
         print("    --out <path>           output graph JSON (default graphify-out/graph.json)")
@@ -748,6 +749,11 @@ def _run_cli() -> None:
     if cmd in {"onec", "analyze"}:
         from graphify.onec.cli import main as onec_main
         onec_main(sys.argv[2:])
+        return
+
+    if cmd == "init-project":
+        from graphify.onec.init_project import main as init_project_main
+        init_project_main(sys.argv[2:])
         return
 
     if cmd == "index":

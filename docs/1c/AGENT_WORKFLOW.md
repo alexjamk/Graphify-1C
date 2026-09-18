@@ -7,6 +7,7 @@ Graphify-1C нужен прежде всего как **индекс связе�
 Работайте из корня проекта с `src/cf` и `src/cfe/*`. Постройте граф:
 
 ```powershell
+graphify-1c init-project . --agents 'codex,claude,vscode'
 graphify-1c analyze ./src --out graphify-out/graph.json --html graphify-out/graph.html
 ```
 

@@ -387,6 +387,30 @@ def test_streamed_large_graph_builds_disk_index(tmp_path):
     assert query.returncode == 0, query.stderr
 
 
+def test_init_project_reuses_one_install_for_separate_projects(tmp_path):
+    from graphify.onec.init_project import init_project
+
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    shutil.copytree(FIXTURE, first / "src" / "cf")
+    shutil.copytree(FIXTURE, second / "src" / "cf")
+    (first / "AGENTS.md").write_text("# Existing rules\n", encoding="utf-8")
+    init_project(first, ["codex", "claude", "vscode"])
+    init_project(second, ["codex"])
+    first_rules = (first / "AGENTS.md").read_text(encoding="utf-8")
+    assert first_rules.startswith("# Existing rules")
+    assert first_rules.count("<!-- graphify-1c:start -->") == 1
+    assert "graphify-1c index groups" in first_rules
+    assert (first / "CLAUDE.md").exists()
+    assert (first / ".github" / "copilot-instructions.md").exists()
+    assert (second / "AGENTS.md").exists()
+    assert not (second / "CLAUDE.md").exists()
+    assert "graphify-out/" in (first / ".gitignore").read_text(encoding="utf-8")
+    init_project(first, ["codex", "claude", "vscode"])
+    assert (first / "AGENTS.md").read_text(encoding="utf-8") == first_rules
+    assert (first / ".gitignore").read_text(encoding="utf-8").count("graphify-out/") == 1
+
+
 def test_update_rebuilds_onec_graph_and_preserves_extensions(tmp_path):
     project = tmp_path / "project"
     cf = project / "src" / "cf"
